@@ -1,14 +1,11 @@
-import { createRequire } from 'module'
+import cors from 'cors'
+import dotenv from 'dotenv'
+import express from 'express'
+import nodemailer from 'nodemailer'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const require = createRequire(path.join(__dirname, 'server/node_modules'))
-
-const express = require('express')
-const cors = require('cors')
-const dotenv = require('dotenv')
-const nodemailer = require('nodemailer')
 dotenv.config({ path: path.join(__dirname, 'server/.env') })
 
 const PORT = Number(process.env.PORT) || 3001
@@ -106,29 +103,14 @@ app.post('/api/email/verify-code', (req, res) => {
 // 静态文件托管（支持SPA fallback）
 const distPath = path.join(__dirname, 'dist')
 app.use(express.static(distPath))
-app.get('*', (req, res) => {
+app.get('*', (_req, res) => {
   res.sendFile(path.join(distPath, 'index.html'))
 })
 
 app.listen(PORT, '0.0.0.0', () => {
-  const localIP = getLocalIP()
   console.log(`\n🚀 旅行辣椒已启动！`)
-  console.log(`   本机访问: http://127.0.0.1:${PORT}`)
-  console.log(`   局域网访问: http://${localIP}:${PORT}`)
-  console.log(`   \n同 WiFi 下其他设备用 http://${localIP}:${PORT} 访问\n`)
+  console.log(`   访问地址: http://localhost:${PORT}`)
   if (!QQ_EMAIL || !QQ_SMTP_CODE) {
     console.warn('[注意] 未设置 QQ_EMAIL / QQ_SMTP_CODE，发信功能不可用')
   }
 })
-
-function getLocalIP() {
-  const nets = require('os').networkInterfaces()
-  for (const name of Object.keys(nets)) {
-    for (const net of nets[name]) {
-      if (net.family === 'IPv4' && !net.internal) {
-        return net.address
-      }
-    }
-  }
-  return '127.0.0.1'
-}
