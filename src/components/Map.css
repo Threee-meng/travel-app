@@ -1,0 +1,224 @@
+.amap-wrapper {
+  width: 100%;
+  height: 100%;
+}
+
+#amap-container {
+  width: 100%;
+  height: 100%;
+}
+
+.map-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.map-header {
+  padding: 12px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.search-bar {
+  display: flex;
+  gap: 8px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.search-bar input {
+  flex: 1;
+  padding: 10px 16px;
+  font-size: 15px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.search-bar input:focus {
+  border-color: var(--accent);
+}
+
+.search-bar button {
+  padding: 10px 20px;
+  font-size: 15px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.search-bar button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.search-error {
+  text-align: center;
+  color: #e55;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.map-container {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.poi-list {
+  position: absolute;
+  top: 60px;
+  right: 16px;
+  width: 280px;
+  max-height: calc(100% - 80px);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.poi-list h3 {
+  margin: 0;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+}
+
+.poi-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.poi-list li {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.poi-list li:last-child {
+  border-bottom: none;
+}
+
+.poi-list li:hover {
+  background: var(--accent-bg);
+}
+
+.poi-list li strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-h);
+  margin-bottom: 4px;
+}
+
+.poi-list li span {
+  font-size: 12px;
+  color: var(--text);
+}
+
+/* 地图工具按钮 */
+.map-tools {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.tool-btn {
+  padding: 8px 12px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool-btn:hover {
+  background: var(--accent);
+  color: white;
+}
+
+.tool-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 用户标记点列表 */
+.user-markers-list {
+  position: absolute;
+  top: 60px;
+  left: 16px;
+  width: 280px;
+  max-height: calc(100% - 80px);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.user-markers-list h3 {
+  margin: 0;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+}
+
+.user-markers-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.user-markers-list li {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.user-markers-list li:last-child {
+  border-bottom: none;
+}
+
+.user-markers-list li:hover {
+  background: var(--accent-bg);
+}
+
+.user-markers-list li strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-h);
+  margin-bottom: 4px;
+}
+
+.user-markers-list li span {
+  font-size: 12px;
+  color: var(--text);
+}
