@@ -55,8 +55,8 @@ app.post('/api/email/send-code', async (req, res) => {
 
   const transporter = nodemailer.createTransport({
     host: 'smtp.qq.com',
-    port: 465,
-    secure: true,
+    port: 587,
+    secure: false,
     auth: { user: QQ_EMAIL, pass: QQ_SMTP_CODE },
   })
 
