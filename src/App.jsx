@@ -20,6 +20,10 @@ function MyTrip({ trips, onCreateTrip, onDeleteTrip, onUpdateTrip, onShareTrip }
   const [showModal, setShowModal] = useState(false)
   const [editingTrip, setEditingTrip] = useState(null)
 
+  const handleEditTrip = (trip) => {
+    setEditingTrip(trip)
+  }
+
   const generateTripName = (startDate, endDate) => {
     if (!startDate || !endDate) return '行程'
     const start = new Date(startDate)
