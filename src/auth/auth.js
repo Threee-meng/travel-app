@@ -32,11 +32,15 @@ function saveUsers(users) {
 
 export async function requestEmailCode(email) {
   try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 15000)
     const r = await fetch('/api/email/send-code', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: normalizeEmail(email) }),
+      signal: controller.signal,
     })
+    clearTimeout(timeout)
     const data = await r.json().catch(() => ({}))
     if (!r.ok) {
       return { ok: false, error: data.error || '发送失败' }
@@ -45,10 +49,13 @@ export async function requestEmailCode(email) {
       return { ok: false, error: data.error || '发送失败' }
     }
     return { ok: true }
-  } catch {
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      return { ok: false, error: '请求超时，请检查网络后重试' }
+    }
     return {
       ok: false,
-      error: '无法连接发信服务：请先在本机运行 npm run server 或使用 npm run dev:all',
+      error: '无法连接发信服务，请检查网络后重试',
     }
   }
 }
