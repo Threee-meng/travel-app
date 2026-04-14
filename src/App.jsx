@@ -2,11 +2,8 @@ import { useState, useEffect } from 'react'
 import Map from './components/Map'
 import CreateTripModal from './components/CreateTripModal'
 import TripEdit from './components/TripEdit'
-import AuthModal from './components/AuthModal'
 import NotesModal from './components/NotesModal'
-import UserProfile from './components/UserProfile'
 import ShareModal from './components/ShareModal'
-import { useAuth } from './context/useAuth'
 import './App.css'
 
 const TABS = [
@@ -19,48 +16,16 @@ function WorldGuide() {
   return <Map />
 }
 
-function MyTrip({ trips, onCreateTrip, onDeleteTrip, onUpdateTrip, onOpenAuth, isLoggedIn, onShareTrip }) {
+function MyTrip({ trips, onCreateTrip, onDeleteTrip, onUpdateTrip, onShareTrip }) {
   const [showModal, setShowModal] = useState(false)
   const [editingTrip, setEditingTrip] = useState(null)
 
-  const handleCreateTrip = (tripData) => {
-    onCreateTrip(tripData)
-    setShowModal(false)
-  }
-
-  const handleEditTrip = (trip) => {
-    setEditingTrip(trip)
-  }
-
-  const handleUpdateTrip = (updatedTrip) => {
-    onUpdateTrip(updatedTrip)
-    setEditingTrip(null)
-  }
-
-  // 生成行程天数名称
   const generateTripName = (startDate, endDate) => {
     if (!startDate || !endDate) return '行程'
     const start = new Date(startDate)
     const end = new Date(endDate)
     const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
     return `${days}日游`
-  }
-
-  if (!isLoggedIn) {
-    return (
-      <div className="trip-page">
-        <div className="trip-left">
-          <Map />
-        </div>
-        <div className="trip-right trip-auth-panel">
-          <p className="trip-auth-tip">登录后可创建行程，数据保存在本机并与当前邮箱账号绑定。</p>
-          <button type="button" className="create-trip-btn" onClick={onOpenAuth}>
-            <span className="create-trip-icon">🔐</span>
-            <span className="create-trip-text">登录 / 注册</span>
-          </button>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -111,7 +76,7 @@ function MyTrip({ trips, onCreateTrip, onDeleteTrip, onUpdateTrip, onOpenAuth, i
                     </div>
                   </div>
                   <div className="trip-card-dates">{trip.startDate} ~ {trip.endDate}</div>
-                  <div className="trip-card-cities">{trip.cities.join('、')}</div>
+                  <div className="trip-card-cities">{trip.cities?.join('、')}</div>
                 </div>
               ))
             )}
@@ -121,13 +86,19 @@ function MyTrip({ trips, onCreateTrip, onDeleteTrip, onUpdateTrip, onOpenAuth, i
       {showModal && (
         <CreateTripModal
           onClose={() => setShowModal(false)}
-          onConfirm={handleCreateTrip}
+          onConfirm={(tripData) => {
+            onCreateTrip(tripData)
+            setShowModal(false)
+          }}
         />
       )}
       {editingTrip && (
         <TripEdit
           trip={editingTrip}
-          onSave={handleUpdateTrip}
+          onSave={(updatedTrip) => {
+            onUpdateTrip(updatedTrip)
+            setEditingTrip(null)
+          }}
           onClose={() => setEditingTrip(null)}
         />
       )}
@@ -135,37 +106,9 @@ function MyTrip({ trips, onCreateTrip, onDeleteTrip, onUpdateTrip, onOpenAuth, i
   )
 }
 
-function TravelNotes({ notes, onAddNote, onUpdateNote, onDeleteNote, onOpenAuth, isLoggedIn }) {
+function TravelNotes({ notes, onAddNote, onUpdateNote, onDeleteNote }) {
   const [showModal, setShowModal] = useState(false)
   const [editingNote, setEditingNote] = useState(null)
-
-  const handleAddNote = (noteData) => {
-    onAddNote(noteData)
-    setShowModal(false)
-  }
-
-  const handleEditNote = (note) => {
-    setEditingNote(note)
-  }
-
-  const handleUpdateNote = (updatedNote) => {
-    onUpdateNote(updatedNote)
-    setEditingNote(null)
-  }
-
-  if (!isLoggedIn) {
-    return (
-      <div className="notes-page">
-        <div className="notes-auth-panel">
-          <p className="notes-auth-tip">登录后可创建旅行札记，记录你的旅行故事。</p>
-          <button type="button" className="create-note-btn" onClick={onOpenAuth}>
-            <span className="create-note-icon">🔐</span>
-            <span className="create-note-text">登录 / 注册</span>
-          </button>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="notes-page">
@@ -200,7 +143,7 @@ function TravelNotes({ notes, onAddNote, onUpdateNote, onDeleteNote, onOpenAuth,
               </div>
               <button
                 className="note-card-edit"
-                onClick={() => handleEditNote(note)}
+                onClick={() => setEditingNote(note)}
               >
                 编辑
               </button>
@@ -212,7 +155,10 @@ function TravelNotes({ notes, onAddNote, onUpdateNote, onDeleteNote, onOpenAuth,
         <NotesModal
           open={showModal}
           onClose={() => setShowModal(false)}
-          onSave={handleAddNote}
+          onSave={(noteData) => {
+            onAddNote(noteData)
+            setShowModal(false)
+          }}
         />
       )}
       {editingNote && (
@@ -220,40 +166,92 @@ function TravelNotes({ notes, onAddNote, onUpdateNote, onDeleteNote, onOpenAuth,
           open={!!editingNote}
           onClose={() => setEditingNote(null)}
           note={editingNote}
-          onSave={handleUpdateNote}
+          onSave={(updatedNote) => {
+            onUpdateNote(updatedNote)
+            setEditingNote(null)
+          }}
         />
       )}
     </div>
   )
 }
 
-function loadTripsForEmail(userEmail) {
-  if (!userEmail) return []
+function loadTrips() {
   try {
-    const saved = localStorage.getItem(`travel-trips-${userEmail}`)
+    const saved = localStorage.getItem('travel-trips')
     return saved ? JSON.parse(saved) : []
   } catch {
     return []
   }
 }
 
-function loadNotesForEmail(userEmail) {
-  if (!userEmail) return []
+function loadNotes() {
   try {
-    const saved = localStorage.getItem(`travel-notes-${userEmail}`)
+    const saved = localStorage.getItem('travel-notes')
     return saved ? JSON.parse(saved) : []
   } catch {
     return []
   }
 }
 
-function TripTabRoute({ userEmail, isLoggedIn, onOpenAuth, onShareTrip }) {
-  const [trips, setTrips] = useState(() => loadTripsForEmail(userEmail))
+function SharedTripView({ shareCode }) {
+  const [trip, setTrip] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!userEmail) return
-    localStorage.setItem(`travel-trips-${userEmail}`, JSON.stringify(trips))
-  }, [trips, userEmail])
+    if (!shareCode) return
+
+    fetch(`/api/share/${shareCode}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) {
+          setTrip(data.trip)
+        } else {
+          setError(data.error || '加载失败')
+        }
+      })
+      .catch(() => setError('网络错误'))
+      .finally(() => setLoading(false))
+  }, [shareCode])
+
+  if (loading) return <div className="shared-trip-loading">加载分享行程中...</div>
+  if (error) return <div className="shared-trip-error">{error}</div>
+  if (!trip) return null
+
+  return (
+    <div className="shared-trip-view">
+      <h2>查看分享的行程</h2>
+      <div className="shared-trip-info">
+        <p><strong>目的地：</strong>{trip.cities?.join('、')}</p>
+        <p><strong>时间：</strong>{trip.startDate} ~ {trip.endDate}</p>
+      </div>
+      <Map sharedTrip={trip} />
+    </div>
+  )
+}
+
+function App() {
+  const [activeTab, setActiveTab] = useState('world')
+  const [shareModalOpen, setShareModalOpen] = useState(false)
+  const [sharingTrip, setSharingTrip] = useState(null)
+  const [shareCodeFromUrl, setShareCodeFromUrl] = useState(null)
+
+  // 从URL读取分享码
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('share')
+    if (code) {
+      setShareCodeFromUrl(code)
+      setActiveTab('trip')
+    }
+  }, [])
+
+  // 行程
+  const [trips, setTrips] = useState(() => loadTrips())
+  useEffect(() => {
+    localStorage.setItem('travel-trips', JSON.stringify(trips))
+  }, [trips])
 
   const handleCreateTrip = (tripData) => {
     const newTrip = {
@@ -265,74 +263,68 @@ function TripTabRoute({ userEmail, isLoggedIn, onOpenAuth, onShareTrip }) {
       favorites: [],
       days: []
     }
-    setTrips((prev) => [...prev, newTrip])
+    setTrips(prev => [...prev, newTrip])
   }
 
   const handleUpdateTrip = (updatedTrip) => {
-    setTrips((prev) => prev.map((t) => (t.id === updatedTrip.id ? updatedTrip : t)))
+    setTrips(prev => prev.map(t => t.id === updatedTrip.id ? updatedTrip : t))
   }
 
   const handleDeleteTrip = (index) => {
-    setTrips((prev) => prev.filter((_, i) => i !== index))
+    setTrips(prev => prev.filter((_, i) => i !== index))
   }
-
-  return (
-    <MyTrip
-      trips={trips}
-      onCreateTrip={handleCreateTrip}
-      onDeleteTrip={handleDeleteTrip}
-      onUpdateTrip={handleUpdateTrip}
-      isLoggedIn={isLoggedIn}
-      onOpenAuth={onOpenAuth}
-      onShareTrip={onShareTrip}
-    />
-  )
-}
-
-function NotesTabRoute({ userEmail, isLoggedIn, onOpenAuth }) {
-  const [notes, setNotes] = useState(() => loadNotesForEmail(userEmail))
-
-  useEffect(() => {
-    if (!userEmail) return
-    localStorage.setItem(`travel-notes-${userEmail}`, JSON.stringify(notes))
-  }, [notes, userEmail])
-
-  const handleAddNote = (noteData) => {
-    setNotes((prev) => [...prev, noteData])
-  }
-
-  const handleUpdateNote = (updatedNote) => {
-    setNotes((prev) => prev.map((n) => (n.id === updatedNote.id ? updatedNote : n)))
-  }
-
-  const handleDeleteNote = (noteId) => {
-    setNotes((prev) => prev.filter((n) => n.id !== noteId))
-  }
-
-  return (
-    <TravelNotes
-      notes={notes}
-      onAddNote={handleAddNote}
-      onUpdateNote={handleUpdateNote}
-      onDeleteNote={handleDeleteNote}
-      isLoggedIn={isLoggedIn}
-      onOpenAuth={onOpenAuth}
-    />
-  )
-}
-
-function App() {
-  const { email, isLoggedIn, logout } = useAuth()
-  const [activeTab, setActiveTab] = useState('world')
-  const [authModalOpen, setAuthModalOpen] = useState(false)
-  const [authModalMode, setAuthModalMode] = useState('login')
-  const [profileModalOpen, setProfileModalOpen] = useState(false)
-  const [shareModalOpen, setShareModalOpen] = useState(false)
-  const [sharingTrip, setSharingTrip] = useState(null)
 
   const handleShareTrip = (trip) => {
     setSharingTrip(trip)
     setShareModalOpen(true)
+  }
+
+  // 札记
+  const [notes, setNotes] = useState(() => loadNotes())
+  useEffect(() => {
+    localStorage.setItem('travel-notes', JSON.stringify(notes))
+  }, [notes])
+
+  const handleAddNote = (noteData) => {
+    const newNote = {
+      id: Date.now().toString(),
+      ...noteData
+    }
+    setNotes(prev => [...prev, newNote])
+  }
+
+  const handleUpdateNote = (updatedNote) => {
+    setNotes(prev => prev.map(n => n.id === updatedNote.id ? updatedNote : n))
+  }
+
+  const handleDeleteNote = (noteId) => {
+    setNotes(prev => prev.filter(n => n.id !== noteId))
+  }
+
+  // 有分享码时只显示分享的行程
+  if (shareCodeFromUrl) {
+    return (
+      <div className="app">
+        <header className="app-header">
+          <div className="app-brand">🌶️ 旅行辣椒</div>
+          <div className="app-header-auth">
+            <button
+              type="button"
+              className="app-auth-btn secondary"
+              onClick={() => {
+                setShareCodeFromUrl(null)
+                window.history.pushState({}, '', window.location.pathname)
+              }}
+            >
+              返回我的行程
+            </button>
+          </div>
+        </header>
+        <main className="app-main">
+          <SharedTripView shareCode={shareCodeFromUrl} />
+        </main>
+      </div>
+    )
   }
 
   return (
@@ -354,87 +346,27 @@ function App() {
             ))}
           </nav>
         </div>
-        <div className="app-header-auth">
-          {isLoggedIn ? (
-            <>
-              <button
-                type="button"
-                className="app-profile-btn"
-                onClick={() => setProfileModalOpen(true)}
-                title="个人资料"
-              >
-                👤
-              </button>
-              <span className="app-user-email" title={email}>{email}</span>
-              <button
-                type="button"
-                className="app-auth-btn secondary"
-                onClick={logout}
-              >
-                退出
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                className="app-auth-btn secondary"
-                onClick={() => {
-                  setAuthModalMode('login')
-                  setAuthModalOpen(true)
-                }}
-              >
-                登录
-              </button>
-              <button
-                type="button"
-                className="app-auth-btn"
-                onClick={() => {
-                  setAuthModalMode('register')
-                  setAuthModalOpen(true)
-                }}
-              >
-                注册
-              </button>
-            </>
-          )}
-        </div>
       </header>
       <main className="app-main">
         {activeTab === 'world' && <WorldGuide />}
         {activeTab === 'trip' && (
-          <TripTabRoute
-            key={email ?? 'guest'}
-            userEmail={email}
-            isLoggedIn={isLoggedIn}
-            onOpenAuth={() => {
-              setAuthModalMode('login')
-              setAuthModalOpen(true)
-            }}
+          <MyTrip
+            trips={trips}
+            onCreateTrip={handleCreateTrip}
+            onDeleteTrip={handleDeleteTrip}
+            onUpdateTrip={handleUpdateTrip}
             onShareTrip={handleShareTrip}
           />
         )}
         {activeTab === 'notes' && (
-          <NotesTabRoute
-            key={email ?? 'guest'}
-            userEmail={email}
-            isLoggedIn={isLoggedIn}
-            onOpenAuth={() => {
-              setAuthModalMode('login')
-              setAuthModalOpen(true)
-            }}
+          <TravelNotes
+            notes={notes}
+            onAddNote={handleAddNote}
+            onUpdateNote={handleUpdateNote}
+            onDeleteNote={handleDeleteNote}
           />
         )}
       </main>
-      <AuthModal
-        open={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
-        initialMode={authModalMode}
-      />
-      <UserProfile
-        open={profileModalOpen}
-        onClose={() => setProfileModalOpen(false)}
-      />
       <ShareModal
         open={shareModalOpen}
         onClose={() => setShareModalOpen(false)}

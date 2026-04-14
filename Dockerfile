@@ -6,7 +6,6 @@ COPY package*.json ./
 RUN npm install
 
 COPY dist ./dist
-COPY server/.env.example ./server/.env.example
 COPY deploy.js ./
 
 EXPOSE 3001
