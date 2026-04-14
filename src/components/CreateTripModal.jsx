@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 // 完整城市列表（含省份）
 const CITIES_BY_REGION = {
@@ -41,7 +41,7 @@ const CITIES_BY_REGION = {
 // 所有可选城市（扁平列表）
 const ALL_CITIES = Object.values(CITIES_BY_REGION).flat()
 
-function CreateTripModal({ onClose, onConfirm }) {
+function CreateTripModal({ onClose, onConfirm, onGenerateTripCode }) {
   const [step, setStep] = useState(1)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -50,6 +50,11 @@ function CreateTripModal({ onClose, onConfirm }) {
   const [searchResults, setSearchResults] = useState([])
   const [provinceCities, setProvinceCities] = useState([])
   const [searching, setSearching] = useState(false)
+  const [shareCode, setShareCode] = useState('')
+  const [codeLoading, setCodeLoading] = useState(false)
+  const [codeError, setCodeError] = useState('')
+  const [submitError, setSubmitError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   // 搜索城市
   useEffect(() => {
@@ -122,20 +127,75 @@ function CreateTripModal({ onClose, onConfirm }) {
       return startDate && endDate && isDateValid()
     }
     if (step === 2) {
-      return selectedCities.length > 0
+      return selectedCities.length > 0 && Boolean(shareCode) && !submitting
     }
     return false
   }
 
-  const handleConfirm = () => {
+  const generateCode = useCallback(async (nextShareCode = shareCode) => {
+    if (!startDate || !endDate || new Date(endDate) < new Date(startDate) || selectedCities.length === 0) {
+      setCodeError('请先填写日期和目的地，再生成行程码')
+      return ''
+    }
+
+    setCodeLoading(true)
+    setCodeError('')
+
+    try {
+      const nextCode = await onGenerateTripCode({
+        startDate,
+        endDate,
+        cities: selectedCities,
+        shareCode: nextShareCode,
+      })
+      setShareCode(nextCode)
+      return nextCode
+    } catch (error) {
+      setCodeError(error.message || '生成行程码失败')
+      return ''
+    } finally {
+      setCodeLoading(false)
+    }
+  }, [startDate, endDate, selectedCities, shareCode, onGenerateTripCode])
+
+  const handleGenerateCode = async () => {
+    await generateCode()
+  }
+
+  useEffect(() => {
+    if (step !== 2) return
+    if (!startDate || !endDate) return
+    if (new Date(endDate) < new Date(startDate)) return
+    if (selectedCities.length === 0) return
+    if (codeLoading || shareCode) return
+
+    generateCode('')
+  }, [step, startDate, endDate, selectedCities, codeLoading, shareCode, generateCode])
+
+  const handleConfirm = async () => {
     if (step === 1) {
       setStep(2)
     } else {
-      onConfirm({
-        startDate,
-        endDate,
-        cities: selectedCities
-      })
+      setSubmitting(true)
+      setSubmitError('')
+
+      try {
+        const ensuredShareCode = shareCode || await generateCode('')
+        if (!ensuredShareCode) {
+          throw new Error('行程码生成失败，请稍后重试')
+        }
+
+        await onConfirm({
+          startDate,
+          endDate,
+          cities: selectedCities,
+          shareCode: ensuredShareCode,
+        })
+      } catch (error) {
+        setSubmitError(error.message || '保存行程失败')
+      } finally {
+        setSubmitting(false)
+      }
     }
   }
 
@@ -263,6 +323,33 @@ function CreateTripModal({ onClose, onConfirm }) {
                   <div className="city-hint">请输入省或城市名称搜索</div>
                 )}
               </div>
+
+              <div className="trip-code-panel">
+                <div className="trip-code-panel-header">
+                  <div>
+                    <div className="trip-code-panel-title">生成行程码</div>
+                    <div className="trip-code-panel-desc">
+                      日期和目的地确认后，先生成行程码。保存行程时会自动同步最新内容。
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="trip-code-generate"
+                    onClick={handleGenerateCode}
+                    disabled={codeLoading || selectedCities.length === 0 || !startDate || !endDate}
+                  >
+                    {codeLoading ? '生成中...' : shareCode ? '重新生成' : '立即生成'}
+                  </button>
+                </div>
+
+                <div className="trip-code-preview">
+                  <span className="trip-code-preview-label">当前行程码</span>
+                  <strong className="trip-code-preview-value">{shareCode || '未生成'}</strong>
+                </div>
+
+                {codeError && <div className="modal-message">{codeError}</div>}
+                {submitError && <div className="modal-message">{submitError}</div>}
+              </div>
             </div>
           )}
         </div>
@@ -276,7 +363,7 @@ function CreateTripModal({ onClose, onConfirm }) {
             disabled={!canProceed()}
             onClick={handleConfirm}
           >
-            {step === 1 ? '下一步' : '完成'}
+            {step === 1 ? '下一步' : submitting ? '保存中...' : '完成'}
           </button>
         </div>
       </div>

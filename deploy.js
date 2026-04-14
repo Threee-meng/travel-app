@@ -37,9 +37,13 @@ function saveShares(shares) {
   }
 }
 
+function normalizeShareCode(value) {
+  return String(value ?? '').trim().toUpperCase()
+}
+
 // 生成分享码
 function generateShareCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   let code = ''
   for (let i = 0; i < 8; i++) {
     code += chars[Math.floor(Math.random() * chars.length)]
@@ -47,24 +51,47 @@ function generateShareCode() {
   return code
 }
 
+function createUniqueShareCode(shares) {
+  let shareCode = generateShareCode()
+  while (shares[shareCode]) {
+    shareCode = generateShareCode()
+  }
+  return shareCode
+}
+
+function migrateShareCodeKey(shares, shareCode) {
+  const currentKey = Object.keys(shares).find((code) => normalizeShareCode(code) === shareCode)
+  if (currentKey && currentKey !== shareCode) {
+    shares[shareCode] = shares[currentKey]
+    delete shares[currentKey]
+  }
+}
+
 // 保存分享的行程
 app.post('/api/share', (req, res) => {
-  const { trip } = req.body
+  const { trip, shareCode: rawShareCode } = req.body ?? {}
   if (!trip) {
     return res.status(400).json({ ok: false, error: '缺少行程数据' })
   }
 
   const shares = loadShares()
-  let shareCode = generateShareCode()
-  // 避免重复
-  while (shares[shareCode]) {
-    shareCode = generateShareCode()
+  let shareCode = normalizeShareCode(rawShareCode)
+
+  if (shareCode) {
+    migrateShareCodeKey(shares, shareCode)
+  } else {
+    shareCode = createUniqueShareCode(shares)
   }
 
+  const existing = shares[shareCode]
   shares[shareCode] = {
-    trip,
-    createdAt: new Date().toISOString(),
-    views: 0
+    trip: {
+      ...trip,
+      shareCode,
+    },
+    createdAt: existing?.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    views: existing?.views || 0,
   }
   saveShares(shares)
 
@@ -73,18 +100,31 @@ app.post('/api/share', (req, res) => {
 
 // 获取分享的行程
 app.get('/api/share/:code', (req, res) => {
-  const { code } = req.params
   const shares = loadShares()
-  const share = shares[code]
+  const inputCode = String(req.params.code ?? '')
+  const shareCode = normalizeShareCode(inputCode)
+  const currentKey = Object.keys(shares).find(
+    (code) => code === inputCode || normalizeShareCode(code) === shareCode,
+  )
+  const share = currentKey ? shares[currentKey] : null
 
   if (!share) {
     return res.status(404).json({ ok: false, error: '分享不存在或已失效' })
   }
 
+  if (currentKey && currentKey !== shareCode) {
+    shares[shareCode] = share
+    delete shares[currentKey]
+  }
+
   share.views = (share.views || 0) + 1
+  share.trip = {
+    ...share.trip,
+    shareCode,
+  }
   saveShares(shares)
 
-  res.json({ ok: true, trip: share.trip })
+  res.json({ ok: true, shareCode, trip: share.trip })
 })
 
 // 健康检查

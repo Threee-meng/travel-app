@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Map from './components/Map'
 import CreateTripModal from './components/CreateTripModal'
 import TripEdit from './components/TripEdit'
@@ -9,27 +9,88 @@ import './App.css'
 const TABS = [
   { id: 'world', name: '世界图鉴' },
   { id: 'trip', name: '我的行程' },
-  { id: 'notes', name: '旅行札记' }
+  { id: 'notes', name: '旅行札记' },
 ]
+
+function normalizeTripCode(value) {
+  return String(value ?? '').trim().toUpperCase()
+}
+
+function generateTripName(startDate, endDate) {
+  if (!startDate || !endDate) return '行程'
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+  const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
+  return `${days}日游`
+}
+
+function createTripRecord(trip) {
+  return {
+    ...trip,
+    id: trip.id ?? Date.now().toString(),
+    name: trip.name ?? '',
+    startDate: trip.startDate ?? '',
+    endDate: trip.endDate ?? '',
+    cities: Array.isArray(trip.cities) ? trip.cities : [],
+    favorites: Array.isArray(trip.favorites) ? trip.favorites : [],
+    days: Array.isArray(trip.days) ? trip.days : [],
+    budget: trip.budget ?? '',
+    notes: trip.notes ?? '',
+    tags: Array.isArray(trip.tags) ? trip.tags : [],
+    shareCode: normalizeTripCode(trip.shareCode),
+  }
+}
+
+async function requestTripShareCode(trip) {
+  const response = await fetch('/api/share', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      trip: {
+        ...trip,
+        shareCode: normalizeTripCode(trip.shareCode) || undefined,
+      },
+      shareCode: normalizeTripCode(trip.shareCode) || undefined,
+    }),
+  })
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok || !data.ok) {
+    throw new Error(data.error || '生成行程码失败')
+  }
+
+  return normalizeTripCode(data.shareCode)
+}
 
 function WorldGuide() {
   return <Map />
 }
 
-function MyTrip({ trips, onCreateTrip, onDeleteTrip, onUpdateTrip, onShareTrip }) {
+function MyTrip({
+  trips,
+  onCreateTrip,
+  onDeleteTrip,
+  onUpdateTrip,
+  onShareTrip,
+  onGenerateTripCode,
+  onOpenTripCode,
+}) {
   const [showModal, setShowModal] = useState(false)
   const [editingTrip, setEditingTrip] = useState(null)
+  const [tripCodeInput, setTripCodeInput] = useState('')
+  const [tripCodeError, setTripCodeError] = useState('')
 
-  const handleEditTrip = (trip) => {
-    setEditingTrip(trip)
-  }
+  const handleTripCodeSubmit = (event) => {
+    event.preventDefault()
 
-  const generateTripName = (startDate, endDate) => {
-    if (!startDate || !endDate) return '行程'
-    const start = new Date(startDate)
-    const end = new Date(endDate)
-    const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
-    return `${days}日游`
+    try {
+      onOpenTripCode(tripCodeInput)
+      setTripCodeError('')
+      setTripCodeInput('')
+    } catch (error) {
+      setTripCodeError(error.message || '请输入有效的行程码')
+    }
   }
 
   return (
@@ -42,8 +103,33 @@ function MyTrip({ trips, onCreateTrip, onDeleteTrip, onUpdateTrip, onShareTrip }
           <span className="create-trip-icon">+</span>
           <span className="create-trip-text">创建行程</span>
         </button>
+
         <div className="trip-section">
           <h3>我的行程</h3>
+
+          <div className="trip-code-entry">
+            <p className="trip-code-tip">输入行程码后，可以直接查看分享行程。</p>
+            <form className="trip-code-form" onSubmit={handleTripCodeSubmit}>
+              <input
+                type="text"
+                className="trip-code-input"
+                placeholder="输入行程码"
+                value={tripCodeInput}
+                maxLength={8}
+                onChange={(event) => {
+                  setTripCodeInput(normalizeTripCode(event.target.value))
+                  if (tripCodeError) {
+                    setTripCodeError('')
+                  }
+                }}
+              />
+              <button type="submit" className="trip-code-submit">
+                查看
+              </button>
+            </form>
+            {tripCodeError && <div className="trip-code-error">{tripCodeError}</div>}
+          </div>
+
           <div className="trip-section-list">
             {trips.length === 0 ? (
               <div className="trip-section-empty">暂无行程</div>
@@ -52,15 +138,29 @@ function MyTrip({ trips, onCreateTrip, onDeleteTrip, onUpdateTrip, onShareTrip }
                 <div
                   key={trip.id || index}
                   className="trip-card"
-                  onClick={() => handleEditTrip(trip)}
+                  onClick={() => setEditingTrip(trip)}
                 >
                   <div className="trip-card-header">
-                    <span className="trip-card-title">{generateTripName(trip.startDate, trip.endDate)}</span>
+                    <div className="trip-card-header-main">
+                      <div className="trip-card-title-row">
+                        <span className="trip-card-title">
+                          {generateTripName(trip.startDate, trip.endDate)}
+                        </span>
+                        <span className={`trip-code-badge ${trip.shareCode ? '' : 'is-empty'}`}>
+                          行程码 {trip.shareCode || '待生成'}
+                        </span>
+                      </div>
+                      <div className="trip-card-dates">
+                        {trip.startDate} ~ {trip.endDate}
+                      </div>
+                      <div className="trip-card-cities">{trip.cities?.join('、')}</div>
+                    </div>
+
                     <div className="trip-card-actions">
                       <button
                         className="trip-card-share"
-                        onClick={(e) => {
-                          e.stopPropagation()
+                        onClick={(event) => {
+                          event.stopPropagation()
                           onShareTrip(trip)
                         }}
                         title="分享行程"
@@ -69,8 +169,8 @@ function MyTrip({ trips, onCreateTrip, onDeleteTrip, onUpdateTrip, onShareTrip }
                       </button>
                       <button
                         className="trip-card-delete"
-                        onClick={(e) => {
-                          e.stopPropagation()
+                        onClick={(event) => {
+                          event.stopPropagation()
                           onDeleteTrip(index)
                         }}
                         title="删除行程"
@@ -79,29 +179,34 @@ function MyTrip({ trips, onCreateTrip, onDeleteTrip, onUpdateTrip, onShareTrip }
                       </button>
                     </div>
                   </div>
-                  <div className="trip-card-dates">{trip.startDate} ~ {trip.endDate}</div>
-                  <div className="trip-card-cities">{trip.cities?.join('、')}</div>
                 </div>
               ))
             )}
           </div>
         </div>
       </div>
+
       {showModal && (
         <CreateTripModal
           onClose={() => setShowModal(false)}
-          onConfirm={(tripData) => {
-            onCreateTrip(tripData)
+          onGenerateTripCode={onGenerateTripCode}
+          onConfirm={async (tripData) => {
+            await onCreateTrip(tripData)
             setShowModal(false)
           }}
         />
       )}
+
       {editingTrip && (
         <TripEdit
           trip={editingTrip}
-          onSave={(updatedTrip) => {
-            onUpdateTrip(updatedTrip)
-            setEditingTrip(null)
+          onSave={async (updatedTrip) => {
+            try {
+              await onUpdateTrip(updatedTrip)
+              setEditingTrip(null)
+            } catch (error) {
+              window.alert(error.message || '保存行程失败')
+            }
           }}
           onClose={() => setEditingTrip(null)}
         />
@@ -123,6 +228,7 @@ function TravelNotes({ notes, onAddNote, onUpdateNote, onDeleteNote }) {
           <span className="create-note-text">创建笔记</span>
         </button>
       </div>
+
       <div className="notes-list">
         {notes.length === 0 ? (
           <div className="notes-empty">暂无笔记</div>
@@ -131,10 +237,7 @@ function TravelNotes({ notes, onAddNote, onUpdateNote, onDeleteNote }) {
             <div key={note.id} className="note-card">
               <div className="note-card-header">
                 <h3 className="note-card-title">{note.title}</h3>
-                <button
-                  className="note-card-delete"
-                  onClick={() => onDeleteNote(note.id)}
-                >
+                <button className="note-card-delete" onClick={() => onDeleteNote(note.id)}>
                   ×
                 </button>
               </div>
@@ -145,16 +248,14 @@ function TravelNotes({ notes, onAddNote, onUpdateNote, onDeleteNote }) {
               <div className="note-card-content">
                 {note.content.length > 100 ? `${note.content.substring(0, 100)}...` : note.content}
               </div>
-              <button
-                className="note-card-edit"
-                onClick={() => setEditingNote(note)}
-              >
+              <button className="note-card-edit" onClick={() => setEditingNote(note)}>
                 编辑
               </button>
             </div>
           ))
         )}
       </div>
+
       {showModal && (
         <NotesModal
           open={showModal}
@@ -165,9 +266,10 @@ function TravelNotes({ notes, onAddNote, onUpdateNote, onDeleteNote }) {
           }}
         />
       )}
+
       {editingNote && (
         <NotesModal
-          open={!!editingNote}
+          open={Boolean(editingNote)}
           onClose={() => setEditingNote(null)}
           note={editingNote}
           onSave={(updatedNote) => {
@@ -206,9 +308,9 @@ function SharedTripView({ shareCode }) {
   useEffect(() => {
     if (!shareCode) return
 
-    fetch(`/api/share/${shareCode}`)
-      .then(r => r.json())
-      .then(data => {
+    fetch(`/api/share/${normalizeTripCode(shareCode)}`)
+      .then((response) => response.json())
+      .then((data) => {
         if (data.ok) {
           setTrip(data.trip)
         } else {
@@ -227,8 +329,18 @@ function SharedTripView({ shareCode }) {
     <div className="shared-trip-view">
       <h2>查看分享的行程</h2>
       <div className="shared-trip-info">
-        <p><strong>目的地：</strong>{trip.cities?.join('、')}</p>
-        <p><strong>时间：</strong>{trip.startDate} ~ {trip.endDate}</p>
+        <p>
+          <strong>行程码：</strong>
+          {trip.shareCode || normalizeTripCode(shareCode)}
+        </p>
+        <p>
+          <strong>目的地：</strong>
+          {trip.cities?.join('、')}
+        </p>
+        <p>
+          <strong>时间：</strong>
+          {trip.startDate} ~ {trip.endDate}
+        </p>
       </div>
       <Map sharedTrip={trip} />
     </div>
@@ -239,43 +351,117 @@ function App() {
   const [activeTab, setActiveTab] = useState('world')
   const [shareModalOpen, setShareModalOpen] = useState(false)
   const [sharingTrip, setSharingTrip] = useState(null)
-  const [shareCodeFromUrl, setShareCodeFromUrl] = useState(null)
+  const [shareCodeFromUrl, setShareCodeFromUrl] = useState(() => {
+    const code = new URLSearchParams(window.location.search).get('share')
+    return normalizeTripCode(code) || null
+  })
+  const [initialTrips] = useState(() => loadTrips())
+  const [trips, setTrips] = useState(initialTrips)
+  const [notes, setNotes] = useState(() => loadNotes())
 
-  // 从URL读取分享码
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const code = params.get('share')
-    if (code) {
-      setShareCodeFromUrl(code)
-      setActiveTab('trip')
-    }
-  }, [])
-
-  // 行程
-  const [trips, setTrips] = useState(() => loadTrips())
   useEffect(() => {
     localStorage.setItem('travel-trips', JSON.stringify(trips))
   }, [trips])
 
-  const handleCreateTrip = (tripData) => {
-    const newTrip = {
-      id: Date.now().toString(),
-      name: '',
-      startDate: tripData.startDate,
-      endDate: tripData.endDate,
-      cities: tripData.cities,
-      favorites: [],
-      days: []
+  useEffect(() => {
+    localStorage.setItem('travel-notes', JSON.stringify(notes))
+  }, [notes])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function backfillMissingTripCodes() {
+      if (!initialTrips.some((trip) => !normalizeTripCode(trip.shareCode))) {
+        return
+      }
+
+      const updatedTrips = await Promise.all(
+        initialTrips.map(async (trip) => {
+          if (normalizeTripCode(trip.shareCode)) {
+            return trip
+          }
+
+          try {
+            const shareCode = await requestTripShareCode(createTripRecord(trip))
+            return {
+              ...trip,
+              shareCode,
+            }
+          } catch {
+            return trip
+          }
+        }),
+      )
+
+      if (!cancelled) {
+        const shareCodeMap = new Map(
+          updatedTrips
+            .filter((trip) => normalizeTripCode(trip.shareCode))
+            .map((trip) => [trip.id, normalizeTripCode(trip.shareCode)]),
+        )
+
+        setTrips((currentTrips) =>
+          currentTrips.map((trip) => {
+            const shareCode = shareCodeMap.get(trip.id)
+            return shareCode && !normalizeTripCode(trip.shareCode)
+              ? { ...trip, shareCode }
+              : trip
+          }),
+        )
+      }
     }
-    setTrips(prev => [...prev, newTrip])
+
+    backfillMissingTripCodes()
+
+    return () => {
+      cancelled = true
+    }
+  }, [initialTrips])
+
+  const handleGenerateTripCode = async (tripData) => {
+    const draftTrip = createTripRecord({
+      id: `draft-${Date.now()}`,
+      name: '',
+      ...tripData,
+    })
+
+    return requestTripShareCode(draftTrip)
   }
 
-  const handleUpdateTrip = (updatedTrip) => {
-    setTrips(prev => prev.map(t => t.id === updatedTrip.id ? updatedTrip : t))
+  const handleCreateTrip = async (tripData) => {
+    const newTrip = createTripRecord({
+      id: Date.now().toString(),
+      name: '',
+      ...tripData,
+    })
+
+    try {
+      newTrip.shareCode = await requestTripShareCode(newTrip)
+    } catch (error) {
+      if (!newTrip.shareCode) {
+        throw error
+      }
+    }
+
+    setTrips((prev) => [...prev, newTrip])
+  }
+
+  const handleUpdateTrip = async (updatedTrip) => {
+    const nextTrip = createTripRecord(updatedTrip)
+
+    try {
+      nextTrip.shareCode = await requestTripShareCode(nextTrip)
+    } catch (error) {
+      if (!nextTrip.shareCode) {
+        throw error
+      }
+    }
+
+    setTrips((prev) => prev.map((trip) => (trip.id === nextTrip.id ? nextTrip : trip)))
   }
 
   const handleDeleteTrip = (index) => {
-    setTrips(prev => prev.filter((_, i) => i !== index))
+    setTrips((prev) => prev.filter((_, tripIndex) => tripIndex !== index))
   }
 
   const handleShareTrip = (trip) => {
@@ -283,29 +469,37 @@ function App() {
     setShareModalOpen(true)
   }
 
-  // 札记
-  const [notes, setNotes] = useState(() => loadNotes())
-  useEffect(() => {
-    localStorage.setItem('travel-notes', JSON.stringify(notes))
-  }, [notes])
+  const handleOpenTripCode = (rawCode) => {
+    const shareCode = normalizeTripCode(rawCode)
+    if (!shareCode) {
+      throw new Error('请输入行程码')
+    }
+
+    setShareCodeFromUrl(shareCode)
+    setActiveTab('trip')
+    window.history.pushState({}, '', `?share=${shareCode}`)
+  }
 
   const handleAddNote = (noteData) => {
     const newNote = {
       id: Date.now().toString(),
-      ...noteData
+      ...noteData,
     }
-    setNotes(prev => [...prev, newNote])
+    setNotes((prev) => [...prev, newNote])
   }
 
   const handleUpdateNote = (updatedNote) => {
-    setNotes(prev => prev.map(n => n.id === updatedNote.id ? updatedNote : n))
+    setNotes((prev) => prev.map((note) => (note.id === updatedNote.id ? updatedNote : note)))
   }
 
   const handleDeleteNote = (noteId) => {
-    setNotes(prev => prev.filter(n => n.id !== noteId))
+    setNotes((prev) => prev.filter((note) => note.id !== noteId))
   }
 
-  // 有分享码时只显示分享的行程
+  const currentSharingTrip = sharingTrip
+    ? trips.find((trip) => trip.id === sharingTrip.id) ?? sharingTrip
+    : null
+
   if (shareCodeFromUrl) {
     return (
       <div className="app">
@@ -325,7 +519,7 @@ function App() {
           </div>
         </header>
         <main className="app-main">
-          <SharedTripView shareCode={shareCodeFromUrl} />
+          <SharedTripView key={shareCodeFromUrl} shareCode={shareCodeFromUrl} />
         </main>
       </div>
     )
@@ -334,12 +528,10 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <div className="app-brand">
-          🌶️ 旅行辣椒
-        </div>
+        <div className="app-brand">🌶️ 旅行辣椒</div>
         <div className="app-header-tabs-wrap">
           <nav className="tab-nav">
-            {TABS.map(tab => (
+            {TABS.map((tab) => (
               <button
                 key={tab.id}
                 className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
@@ -351,6 +543,7 @@ function App() {
           </nav>
         </div>
       </header>
+
       <main className="app-main">
         {activeTab === 'world' && <WorldGuide />}
         {activeTab === 'trip' && (
@@ -360,6 +553,8 @@ function App() {
             onDeleteTrip={handleDeleteTrip}
             onUpdateTrip={handleUpdateTrip}
             onShareTrip={handleShareTrip}
+            onGenerateTripCode={handleGenerateTripCode}
+            onOpenTripCode={handleOpenTripCode}
           />
         )}
         {activeTab === 'notes' && (
@@ -371,10 +566,14 @@ function App() {
           />
         )}
       </main>
+
       <ShareModal
         open={shareModalOpen}
-        onClose={() => setShareModalOpen(false)}
-        trip={sharingTrip}
+        onClose={() => {
+          setShareModalOpen(false)
+          setSharingTrip(null)
+        }}
+        trip={currentSharingTrip}
       />
     </div>
   )

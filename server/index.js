@@ -1,6 +1,7 @@
 import cors from 'cors'
 import dotenv from 'dotenv'
 import express from 'express'
+import fs from 'fs'
 import nodemailer from 'nodemailer'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -11,6 +12,7 @@ dotenv.config({ path: path.join(__dirname, '.env') })
 const PORT = Number(process.env.PORT) || 3001
 const QQ_EMAIL = process.env.QQ_EMAIL
 const QQ_SMTP_CODE = process.env.QQ_SMTP_CODE
+const SHARES_FILE = path.join(__dirname, 'shares.json')
 
 /** @type {Map<string, { code: string, exp: number }>} */
 const codes = new Map()
@@ -25,9 +27,115 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
+function normalizeShareCode(value) {
+  return String(value ?? '').trim().toUpperCase()
+}
+
+function loadShares() {
+  try {
+    if (fs.existsSync(SHARES_FILE)) {
+      return JSON.parse(fs.readFileSync(SHARES_FILE, 'utf-8'))
+    }
+  } catch (error) {
+    console.error('Load shares error:', error)
+  }
+  return {}
+}
+
+function saveShares(shares) {
+  try {
+    fs.writeFileSync(SHARES_FILE, JSON.stringify(shares, null, 2))
+  } catch (error) {
+    console.error('Save shares error:', error)
+  }
+}
+
+function generateShareCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let code = ''
+  for (let index = 0; index < 8; index += 1) {
+    code += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return code
+}
+
+function createUniqueShareCode(shares) {
+  let shareCode = generateShareCode()
+  while (shares[shareCode]) {
+    shareCode = generateShareCode()
+  }
+  return shareCode
+}
+
+function migrateShareCodeKey(shares, shareCode) {
+  const currentKey = Object.keys(shares).find((code) => normalizeShareCode(code) === shareCode)
+  if (currentKey && currentKey !== shareCode) {
+    shares[shareCode] = shares[currentKey]
+    delete shares[currentKey]
+  }
+}
+
 const app = express()
 app.use(cors())
 app.use(express.json())
+
+app.post('/api/share', (req, res) => {
+  const { trip, shareCode: rawShareCode } = req.body ?? {}
+  if (!trip) {
+    return res.status(400).json({ ok: false, error: '缺少行程数据' })
+  }
+
+  const shares = loadShares()
+  let shareCode = normalizeShareCode(rawShareCode)
+
+  if (shareCode) {
+    migrateShareCodeKey(shares, shareCode)
+  } else {
+    shareCode = createUniqueShareCode(shares)
+  }
+
+  const existing = shares[shareCode]
+  shares[shareCode] = {
+    trip: {
+      ...trip,
+      shareCode,
+    },
+    createdAt: existing?.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    views: existing?.views || 0,
+  }
+  saveShares(shares)
+
+  res.json({ ok: true, shareCode })
+})
+
+app.get('/api/share/:code', (req, res) => {
+  const shares = loadShares()
+  const inputCode = String(req.params.code ?? '')
+  const shareCode = normalizeShareCode(inputCode)
+  const currentKey = Object.keys(shares).find(
+    (code) => code === inputCode || normalizeShareCode(code) === shareCode,
+  )
+  const share = currentKey ? shares[currentKey] : null
+
+  if (!share) {
+    return res.status(404).json({ ok: false, error: '分享不存在或已失效' })
+  }
+
+  if (currentKey && currentKey !== shareCode) {
+    shares[shareCode] = share
+    delete shares[currentKey]
+  }
+
+  share.views = (share.views || 0) + 1
+  share.trip = {
+    ...share.trip,
+    shareCode,
+  }
+  saveShares(shares)
+
+  res.json({ ok: true, shareCode, trip: share.trip })
+})
 
 app.get('/api/health', (_, res) => {
   res.json({
