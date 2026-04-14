@@ -6,6 +6,7 @@ import fs from 'fs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT) || 3001
+const SHARES_FILE = resolveSharesFile()
 
 const app = express()
 app.use(cors())
@@ -15,8 +16,35 @@ app.use(express.json())
 const distPath = path.join(__dirname, 'dist')
 app.use(express.static(distPath))
 
-// 分享数据存储（简单的JSON文件）
-const SHARES_FILE = path.join(__dirname, 'shares.json')
+function resolveSharesFile() {
+  const configuredFile = String(process.env.SHARES_FILE || '').trim()
+  if (configuredFile) {
+    ensureDir(path.dirname(configuredFile))
+    return configuredFile
+  }
+
+  const configuredDir = String(process.env.SHARES_DIR || '').trim()
+  if (configuredDir) {
+    ensureDir(configuredDir)
+    return path.join(configuredDir, 'shares.json')
+  }
+
+  const railwayVolumePath = String(process.env.RAILWAY_VOLUME_MOUNT_PATH || '').trim()
+  if (railwayVolumePath) {
+    const dataDir = path.join(railwayVolumePath, 'travel-app')
+    ensureDir(dataDir)
+    return path.join(dataDir, 'shares.json')
+  }
+
+  return path.join(__dirname, 'shares.json')
+}
+
+function ensureDir(dirPath) {
+  if (!dirPath) return
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true })
+  }
+}
 
 function loadShares() {
   try {
@@ -140,4 +168,5 @@ app.get('*', (_req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 旅行辣椒已启动！`)
   console.log(`   访问地址: http://localhost:${PORT}`)
+  console.log(`   分享码存储: ${SHARES_FILE}`)
 })

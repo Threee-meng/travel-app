@@ -12,7 +12,7 @@ dotenv.config({ path: path.join(__dirname, '.env') })
 const PORT = Number(process.env.PORT) || 3001
 const QQ_EMAIL = process.env.QQ_EMAIL
 const QQ_SMTP_CODE = process.env.QQ_SMTP_CODE
-const SHARES_FILE = path.join(__dirname, 'shares.json')
+const SHARES_FILE = resolveSharesFile()
 
 /** @type {Map<string, { code: string, exp: number }>} */
 const codes = new Map()
@@ -25,6 +25,36 @@ function normEmail(e) {
 
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+function resolveSharesFile() {
+  const configuredFile = String(process.env.SHARES_FILE || '').trim()
+  if (configuredFile) {
+    ensureDir(path.dirname(configuredFile))
+    return configuredFile
+  }
+
+  const configuredDir = String(process.env.SHARES_DIR || '').trim()
+  if (configuredDir) {
+    ensureDir(configuredDir)
+    return path.join(configuredDir, 'shares.json')
+  }
+
+  const railwayVolumePath = String(process.env.RAILWAY_VOLUME_MOUNT_PATH || '').trim()
+  if (railwayVolumePath) {
+    const dataDir = path.join(railwayVolumePath, 'travel-app')
+    ensureDir(dataDir)
+    return path.join(dataDir, 'shares.json')
+  }
+
+  return path.join(__dirname, 'shares.json')
+}
+
+function ensureDir(dirPath) {
+  if (!dirPath) return
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true })
+  }
 }
 
 function normalizeShareCode(value) {
@@ -221,6 +251,7 @@ app.post('/api/email/verify-code', (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`QQ 邮件服务 http://127.0.0.1:${PORT}`)
+  console.log(`[travel-app] 分享码存储: ${SHARES_FILE}`)
   if (!QQ_EMAIL || !QQ_SMTP_CODE) {
     console.warn('[travel-app] 未设置 QQ_EMAIL / QQ_SMTP_CODE，发信不可用')
   }
