@@ -23,6 +23,56 @@
   z-index: 10;
 }
 
+.world-guide-map .map-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(255, 214, 102, 0.18), transparent 28%),
+    linear-gradient(135deg, #fffaf0 0%, var(--bg) 55%, #f0fdf4 100%);
+}
+
+.world-guide-search-block {
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.world-guide-hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.world-guide-count {
+  min-width: 78px;
+  min-height: 35px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  flex-shrink: 0;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #c2410c;
+  box-shadow: 0 10px 24px rgba(194, 65, 12, 0.12);
+}
+
+.world-guide-count strong {
+  font-size: 17px;
+  line-height: 1;
+  transform: translateY(2px);
+}
+
+.world-guide-count span {
+  margin-top: 3px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
 .search-bar {
   display: flex;
   gap: 8px;
@@ -67,6 +117,13 @@
   margin-top: 8px;
 }
 
+.map-status {
+  text-align: center;
+  color: #15803d;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .map-container {
   flex: 1;
   min-height: 0;
@@ -108,6 +165,10 @@
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .poi-list li:last-child {
@@ -129,6 +190,41 @@
 .poi-list li span {
   font-size: 12px;
   color: var(--text);
+}
+
+.poi-result-main,
+.visited-place-main {
+  min-width: 0;
+}
+
+.poi-mark-btn,
+.visited-remove-btn {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.poi-mark-btn {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+.poi-mark-btn:hover {
+  background: #ffedd5;
+}
+
+.visited-remove-btn {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.visited-remove-btn:hover {
+  background: #fecaca;
 }
 
 /* 地图工具按钮 */
@@ -200,6 +296,10 @@
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .user-markers-list li:last-child {
@@ -221,4 +321,56 @@
 .user-markers-list li span {
   font-size: 12px;
   color: var(--text);
+}
+
+.visited-places-list {
+  width: 320px;
+}
+
+.visited-star-marker {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff7ed;
+  border: 2px solid #f97316;
+  box-shadow: 0 8px 18px rgba(249, 115, 22, 0.28);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.visited-info-window {
+  padding: 8px;
+  min-width: 210px;
+}
+
+.visited-info-title {
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.visited-info-address {
+  color: #666;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (prefers-color-scheme: dark) {
+  .world-guide-map .map-header {
+    background:
+      radial-gradient(circle at 15% 20%, rgba(251, 191, 36, 0.14), transparent 28%),
+      linear-gradient(135deg, #1f1a12 0%, var(--bg) 55%, #111c16 100%);
+  }
+
+  .world-guide-count,
+  .visited-star-marker,
+  .poi-mark-btn {
+    background: #431407;
+    border-color: #9a3412;
+    color: #fdba74;
+  }
 }

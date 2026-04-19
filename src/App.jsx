@@ -121,7 +121,7 @@ async function fetchTripByShareCode(rawCode, preferredId) {
 }
 
 function WorldGuide() {
-  return <Map />
+  return <Map mode="world" />
 }
 
 function MyTrip({
