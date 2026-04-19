@@ -20,6 +20,90 @@ function TripEdit({ trip, onSave, onClose }) {
   const [tagInput, setTagInput] = useState('')
   const mapRef = useRef(null)
   const mapInstance = useRef(null)
+  const DEFAULT_DAY_START_TIME = '09:00'
+  const DEFAULT_TRAVEL_MINUTES = 30
+  const DEFAULT_STAY_MINUTES = {
+    hotel: 0,
+    transport: 30,
+    spot: 120
+  }
+
+  const parseTimeToMinutes = (time) => {
+    if (!time || !/^\d{2}:\d{2}$/.test(time)) return null
+    const [hour, minute] = time.split(':').map(Number)
+    if (Number.isNaN(hour) || Number.isNaN(minute)) return null
+    return hour * 60 + minute
+  }
+
+  const formatMinutesToTime = (totalMinutes) => {
+    const normalized = Math.max(0, totalMinutes)
+    const hour = Math.floor(normalized / 60) % 24
+    const minute = normalized % 60
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+  }
+
+  const clampDuration = (value, fallback) => {
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed) || parsed < 0) return fallback
+    return Math.round(parsed)
+  }
+
+  const getDefaultStayMinutes = (type) => {
+    return DEFAULT_STAY_MINUTES[type] ?? 90
+  }
+
+  const normalizeItemSchedule = (item, fallbackStartTime = DEFAULT_DAY_START_TIME) => ({
+    ...item,
+    startTime: item.startTime || item.time || fallbackStartTime,
+    travelDuration: clampDuration(item.travelDuration, item.type === 'hotel' ? 0 : 0),
+    stayDuration: clampDuration(item.stayDuration, getDefaultStayMinutes(item.type))
+  })
+
+  const recalculateDaySchedule = (day, options = {}) => {
+    if (!day) return day
+
+    const baseStartMinutes = parseTimeToMinutes(day.travelTime || DEFAULT_DAY_START_TIME)
+      ?? parseTimeToMinutes(DEFAULT_DAY_START_TIME)
+      ?? 540
+    const preserveFirstItemStart = options.preserveFirstItemStart ?? false
+    const items = (day.items || []).map((item) => normalizeItemSchedule(item, day.travelTime || DEFAULT_DAY_START_TIME))
+
+    let currentStartMinutes = baseStartMinutes
+    if (preserveFirstItemStart && items[0]?.startTime) {
+      const firstItemStart = parseTimeToMinutes(items[0].startTime)
+      currentStartMinutes = firstItemStart != null
+        ? Math.max(0, firstItemStart - items[0].travelDuration)
+        : baseStartMinutes
+    }
+
+    const nextItems = items.map((item) => {
+      currentStartMinutes += item.travelDuration
+
+      const startTime = formatMinutesToTime(currentStartMinutes)
+      const normalizedItem = {
+        ...item,
+        startTime,
+        time: startTime
+      }
+
+      currentStartMinutes += normalizedItem.stayDuration
+      return normalizedItem
+    })
+
+    return {
+      ...day,
+      travelTime: day.travelTime || DEFAULT_DAY_START_TIME,
+      items: nextItems
+    }
+  }
+
+  const updateDayWithRecalculation = (dayIndex, updater, options = {}) => {
+    setDays((prev) => prev.map((day, index) => {
+      if (index !== dayIndex) return day
+      const updatedDay = typeof updater === 'function' ? updater(day) : updater
+      return recalculateDaySchedule(updatedDay, options)
+    }))
+  }
 
   // 初始化天数
   useEffect(() => {
@@ -35,13 +119,13 @@ function TripEdit({ trip, onSave, onClose }) {
         const dateStr = date.toISOString().split('T')[0]
 
         if (days[i]) {
-          initDays.push({ ...days[i], date: dateStr })
+          initDays.push(recalculateDaySchedule({ ...days[i], date: dateStr }))
         } else {
-          initDays.push({
+          initDays.push(recalculateDaySchedule({
             date: dateStr,
             items: [],
-            travelTime: ''
-          })
+            travelTime: DEFAULT_DAY_START_TIME
+          }))
         }
       }
       setDays(initDays)
@@ -58,13 +142,14 @@ function TripEdit({ trip, onSave, onClose }) {
     e.dataTransfer.effectAllowed = 'move'
   }
 
-  const handleDragOver = (e, dayIndex, itemIndex) => {
+  const handleDragOver = (e) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
   }
 
   const handleDrop = (e, dayIndex, itemIndex) => {
     e.preventDefault()
+    if (draggingDay === null || draggingItem === null) return
     if (draggingDay === dayIndex) {
       // 在同一天内拖动
       const newDays = [...days]
@@ -75,6 +160,7 @@ function TripEdit({ trip, onSave, onClose }) {
       newDays[draggingDay].items.forEach((item, i) => {
         item.order = i + 1
       })
+      newDays[draggingDay] = recalculateDaySchedule(newDays[draggingDay], { preserveFirstItemStart: true })
       setDays(newDays)
     } else {
       // 在不同天之间拖动
@@ -89,6 +175,8 @@ function TripEdit({ trip, onSave, onClose }) {
       newDays[dayIndex].items.forEach((item, i) => {
         item.order = i + 1
       })
+      newDays[draggingDay] = recalculateDaySchedule(newDays[draggingDay], { preserveFirstItemStart: true })
+      newDays[dayIndex] = recalculateDaySchedule(newDays[dayIndex], { preserveFirstItemStart: true })
       setDays(newDays)
     }
     setDraggingItem(null)
@@ -209,9 +297,7 @@ function TripEdit({ trip, onSave, onClose }) {
           '同里': [120.641795, 31.170128],
           '无锡': [120.305456, 31.570382],
           '常州': [119.974061, 31.811196],
-          '宁波': [121.544112, 29.868323],
           '舟山': [122.106848, 30.017701],
-          '黄山': [118.337648, 29.718708],
           '九华山': [117.479689, 30.466850],
           '宏村': [117.983158, 29.914996],
           '西递': [117.997940, 29.900669],
@@ -243,7 +329,6 @@ function TripEdit({ trip, onSave, onClose }) {
           '镇远': [108.444418, 27.050150],
           '西江千户苗寨': [108.186470, 26.487785],
           '南宁': [108.366379, 22.817317],
-          '桂林': [110.290137, 25.273625],
           '漓江': [110.146443, 25.479582],
           '阳朔': [110.496865, 24.955301],
           '梧州': [111.284775, 23.477253],
@@ -459,7 +544,10 @@ function TripEdit({ trip, onSave, onClose }) {
         dayItems.push({
           ...item,
           order: dayItems.length + 1,
-          time: `${9 + i * 2}:00`
+          startTime: `${String(9 + i * 2).padStart(2, '0')}:00`,
+          time: `${String(9 + i * 2).padStart(2, '0')}:00`,
+          travelDuration: i === 0 ? 0 : DEFAULT_TRAVEL_MINUTES,
+          stayDuration: getDefaultStayMinutes(item.type)
         })
       })
 
@@ -468,7 +556,10 @@ function TripEdit({ trip, onSave, onClose }) {
         dayItems.unshift({
           ...hotels[0],
           order: 0,
-          time: '',
+          startTime: DEFAULT_DAY_START_TIME,
+          time: DEFAULT_DAY_START_TIME,
+          travelDuration: 0,
+          stayDuration: 0,
           type: 'hotel'
         })
         hotels[0].assigned = true
@@ -479,7 +570,10 @@ function TripEdit({ trip, onSave, onClose }) {
         dayItems.push({
           ...transports[dayIndex],
           order: dayItems.length + 1,
+          startTime: '',
           time: '',
+          travelDuration: DEFAULT_TRAVEL_MINUTES,
+          stayDuration: getDefaultStayMinutes('transport'),
           type: 'transport'
         })
         transports[dayIndex].assigned = true
@@ -487,7 +581,12 @@ function TripEdit({ trip, onSave, onClose }) {
 
       return {
         ...day,
-        items: dayItems
+        travelTime: day.travelTime || DEFAULT_DAY_START_TIME,
+        items: recalculateDaySchedule({
+          ...day,
+          travelTime: day.travelTime || DEFAULT_DAY_START_TIME,
+          items: dayItems
+        }).items
       }
     })
 
@@ -531,12 +630,10 @@ function TripEdit({ trip, onSave, onClose }) {
 
   // 从某天删除项目
   const removeFromDay = (dayIndex, itemId) => {
-    setDays(prev => prev.map((day, i) => {
-      if (i === dayIndex) {
-        return { ...day, items: day.items.filter(item => item.id !== itemId) }
-      }
-      return day
-    }))
+    updateDayWithRecalculation(dayIndex, (day) => ({
+      ...day,
+      items: day.items.filter(item => item.id !== itemId)
+    }), { preserveFirstItemStart: true })
   }
 
   // 计算出行方式和时间
@@ -575,10 +672,46 @@ function TripEdit({ trip, onSave, onClose }) {
   }
 
   // 处理时间修改
-  const handleTimeChange = (dayIndex, itemIndex, newTime) => {
-    const newDays = [...days]
-    newDays[dayIndex].items[itemIndex].time = newTime
-    setDays(newDays)
+  const handleTimeChange = (dayIndex, itemIndex, field, rawValue) => {
+    updateDayWithRecalculation(dayIndex, (day) => {
+      const items = [...day.items]
+      const nextItem = normalizeItemSchedule(items[itemIndex], day.travelTime || DEFAULT_DAY_START_TIME)
+
+      if (field === 'startTime') {
+        nextItem.startTime = rawValue
+        nextItem.time = rawValue
+        items[itemIndex] = nextItem
+
+        if (itemIndex === 0) {
+          return {
+            ...day,
+            travelTime: rawValue || day.travelTime || DEFAULT_DAY_START_TIME,
+            items
+          }
+        }
+
+        const previousItem = normalizeItemSchedule(items[itemIndex - 1], day.travelTime || DEFAULT_DAY_START_TIME)
+        const previousStart = parseTimeToMinutes(previousItem.startTime || previousItem.time)
+        const currentStart = parseTimeToMinutes(rawValue)
+        if (previousStart != null && currentStart != null) {
+          nextItem.travelDuration = Math.max(0, currentStart - previousStart - previousItem.stayDuration)
+          items[itemIndex] = nextItem
+        }
+
+        return {
+          ...day,
+          items
+        }
+      }
+
+      nextItem[field] = clampDuration(rawValue, nextItem[field])
+      items[itemIndex] = nextItem
+
+      return {
+        ...day,
+        items
+      }
+    }, { preserveFirstItemStart: true })
   }
 
   // 计算两点之间的距离
@@ -618,7 +751,25 @@ function TripEdit({ trip, onSave, onClose }) {
     }
 
     // AI推荐时间安排
-    const itemsWithTime = recommendTimeSchedule(visited)
+    const itemsWithTime = recalculateDaySchedule({
+      ...day,
+      travelTime: day.travelTime || DEFAULT_DAY_START_TIME,
+      items: visited.map((item, index) => {
+        return {
+          ...item,
+          travelDuration: index === 0 ? 0 : (
+            (() => {
+              const { options } = calculateTransportation(visited[index - 1], item)
+              const fastestTransport = options.length > 0
+                ? options.reduce((prev, current) => (prev.time < current.time ? prev : current))
+                : null
+              return fastestTransport?.time ?? DEFAULT_TRAVEL_MINUTES
+            })()
+          ),
+          stayDuration: clampDuration(item.stayDuration, getDefaultStayMinutes(item.type))
+        }
+      })
+    }).items
 
     const newItems = itemsWithTime.map((item, index) => ({
       ...item,
@@ -626,128 +777,39 @@ function TripEdit({ trip, onSave, onClose }) {
     }))
 
     const newDays = [...days]
-    newDays[dayIndex] = {
+    newDays[dayIndex] = recalculateDaySchedule({
       ...day,
       items: newItems
-    }
+    })
 
     setDays(newDays)
-  }
-
-  // AI推荐时间安排
-  const recommendTimeSchedule = (items) => {
-    if (items.length === 0) return items
-
-    // 起始时间设置为9:00
-    let currentHour = 9
-    let currentMinute = 0
-
-    return items.map((item, index) => {
-      // 设置当前地点的时间
-      const time = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`
-      const updatedItem = {
-        ...item,
-        time
-      }
-
-      // 如果不是最后一个地点，计算到下一个地点的时间
-      if (index < items.length - 1) {
-        const nextItem = items[index + 1]
-        const { options } = calculateTransportation(updatedItem, nextItem)
-        
-        // 选择最快的交通方式
-        const fastestTransport = options.reduce((prev, current) => 
-          prev.time < current.time ? prev : current
-        )
-        
-        // 加上在当前地点的停留时间（默认1小时）
-        let stayTime = 60
-        if (item.type === 'hotel') stayTime = 0 // 酒店作为起点不计算停留时间
-        if (item.type === 'transport') stayTime = 30 // 交通站点停留时间较短
-
-        // 计算总时间（停留时间 + 交通时间）
-        const totalTime = stayTime + fastestTransport.time
-        
-        // 更新当前时间
-        currentMinute += totalTime
-        currentHour += Math.floor(currentMinute / 60)
-        currentMinute %= 60
-
-        // 确保时间合理（不超过22:00）
-        if (currentHour >= 22) {
-          currentHour = 22
-          currentMinute = 0
-        }
-      }
-
-      return updatedItem
-    })
   }
 
   // 处理出行方式选择
   const handleTransportationSelect = (dayIndex, fromIndex, toIndex, transportation) => {
-    const newDays = [...days]
-    if (!newDays[dayIndex].transportations) {
-      newDays[dayIndex].transportations = {}
-    }
-    newDays[dayIndex].transportations[`${fromIndex}-${toIndex}`] = transportation
-    setDays(newDays)
-  }
-
-  // AI推荐最合理的出行顺序
-  const aiRecommendOrder = (dayIndex) => {
-    const day = days[dayIndex]
-    if (!day || day.items.length <= 2) return
-
-    setAiGenerating(true)
-
-    // 模拟AI推荐延迟
-    setTimeout(() => {
-      const items = [...day.items]
-      // 简单的旅行商问题解决方案（贪心算法）
-      const startItem = items[0]
-      const remainingItems = items.slice(1)
-      const orderedItems = [startItem]
-
-      while (remainingItems.length > 0) {
-        let closestItem = remainingItems[0]
-        let closestDistance = Infinity
-        let closestIndex = 0
-
-        const lastItem = orderedItems[orderedItems.length - 1]
-        if (lastItem.location) {
-          remainingItems.forEach((item, index) => {
-            if (item.location) {
-              const distance = Math.sqrt(
-                Math.pow(lastItem.location.lng - item.location.lng, 2) + 
-                Math.pow(lastItem.location.lat - item.location.lat, 2)
-              )
-              if (distance < closestDistance) {
-                closestDistance = distance
-                closestItem = item
-                closestIndex = index
-              }
-            }
-          })
-        }
-
-        orderedItems.push(closestItem)
-        remainingItems.splice(closestIndex, 1)
+    updateDayWithRecalculation(dayIndex, (day) => {
+      const nextDay = {
+        ...day,
+        transportations: {
+          ...(day.transportations || {}),
+          [`${fromIndex}-${toIndex}`]: transportation
+        },
+        items: [...day.items]
       }
 
-      // 更新顺序
-      orderedItems.forEach((item, i) => {
-        item.order = i + 1
-      })
+      const targetItem = normalizeItemSchedule(nextDay.items[toIndex], day.travelTime || DEFAULT_DAY_START_TIME)
+      targetItem.travelDuration = clampDuration(transportation?.time, targetItem.travelDuration)
+      nextDay.items[toIndex] = targetItem
 
-      const newDays = [...days]
-      newDays[dayIndex].items = orderedItems
-      setDays(newDays)
-      setAiGenerating(false)
-    }, 1000)
+      return nextDay
+    }, { preserveFirstItemStart: true })
   }
 
   const hotelFavorites = favorites.filter(f => f.type === 'hotel')
+  const getDayLabel = (dayNumber) => {
+    const labels = ['第一天', '第二天', '第三天', '第四天', '第五天', '第六天', '第七天', '第八天', '第九天', '第十天']
+    return labels[dayNumber - 1] || `第${dayNumber}天`
+  }
 
   return (
     <div className="trip-edit-overlay">
@@ -923,7 +985,7 @@ function TripEdit({ trip, onSave, onClose }) {
               <div className="days-list">
                 {days.map((day, dayIndex) => {
                   const dayNumber = dayIndex + 1
-                  const dayLabel = dayNumber === 1 ? '第一天' : dayNumber === 2 ? '第二天' : `第${dayNumber}天`
+                  const dayLabel = getDayLabel(dayNumber)
                   return (
                     <div key={dayIndex} className="day-item">
                       <div className="day-header">
@@ -932,11 +994,12 @@ function TripEdit({ trip, onSave, onClose }) {
                         <input
                           type="time"
                           className="day-time"
-                          value={day.travelTime || ''}
+                          value={day.travelTime || DEFAULT_DAY_START_TIME}
                           onChange={e => {
-                            const newDays = [...days]
-                            newDays[dayIndex].travelTime = e.target.value
-                            setDays(newDays)
+                            updateDayWithRecalculation(dayIndex, (currentDay) => ({
+                              ...currentDay,
+                              travelTime: e.target.value || DEFAULT_DAY_START_TIME
+                            }))
                           }}
                         />
                         <button 
@@ -952,7 +1015,7 @@ function TripEdit({ trip, onSave, onClose }) {
                           <div className="day-empty">暂无安排</div>
                         ) : (
                           day.items.map((item, itemIndex) => (
-                            <>
+                            <div key={item.id} className="day-item-block">
                               {itemIndex > 0 && (
                                 <div className="transportation-section">
                                   <div className="transportation-header">
@@ -980,7 +1043,6 @@ function TripEdit({ trip, onSave, onClose }) {
                                 </div>
                               )}
                               <div 
-                                key={item.id} 
                                 className="day-item-card"
                                 draggable
                                 onDragStart={(e) => handleDragStart(e, dayIndex, itemIndex)}
@@ -992,16 +1054,32 @@ function TripEdit({ trip, onSave, onClose }) {
                                   {item.type === 'hotel' ? '🏨 ' : item.type === 'transport' ? '🚗 ' : ''}
                                   {item.name}
                                 </span>
-                                <input
-                                  type="time"
-                                  className="item-time-input"
-                                  value={item.time || ''}
-                                  onChange={(e) => handleTimeChange(dayIndex, itemIndex, e.target.value)}
-                                  placeholder="选择时间"
-                                />
+                                <div className="item-schedule-grid">
+                                  <label className="item-schedule-field">
+                                    <span>出行</span>
+                                    <input
+                                      type="time"
+                                      className="item-time-input"
+                                      value={item.startTime || item.time || ''}
+                                      onChange={(e) => handleTimeChange(dayIndex, itemIndex, 'startTime', e.target.value)}
+                                    />
+                                  </label>
+                                  <label className="item-schedule-field">
+                                    <span>游玩</span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="10"
+                                      className="item-duration-input"
+                                      value={item.stayDuration ?? getDefaultStayMinutes(item.type)}
+                                      onChange={(e) => handleTimeChange(dayIndex, itemIndex, 'stayDuration', e.target.value)}
+                                    />
+                                    <em>分钟</em>
+                                  </label>
+                                </div>
                                 <button className="item-delete" onClick={() => removeFromDay(dayIndex, item.id)}>×</button>
                               </div>
-                            </>
+                            </div>
                           ))
                         )}
                       </div>

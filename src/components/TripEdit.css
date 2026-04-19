@@ -347,6 +347,12 @@
   gap: 8px;
 }
 
+.day-item-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .day-empty {
   text-align: center;
   color: var(--text);
@@ -379,11 +385,52 @@
   flex: 1;
   font-size: 13px;
   color: var(--text-h);
+  min-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .item-time {
   font-size: 12px;
   color: var(--text);
+}
+
+.item-schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(82px, auto));
+  gap: 8px;
+  align-items: end;
+}
+
+.item-schedule-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.item-schedule-field span {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.item-schedule-field em {
+  font-style: normal;
+  color: var(--text);
+}
+
+.item-duration-input {
+  width: 58px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  background: var(--social-bg);
+  color: var(--text);
+  text-align: center;
 }
 
 .item-delete {
@@ -758,6 +805,13 @@
   text-align: center;
 }
 
+.item-time-input:focus,
+.item-duration-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+
 /* AI推荐按钮 */
 .ai-recommend-btn {
   padding: 6px 12px;
@@ -868,4 +922,25 @@
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+}
+
+@media (max-width: 900px) {
+  .day-item-card {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .item-name {
+    flex-basis: calc(100% - 56px);
+  }
+
+  .item-schedule-grid {
+    width: 100%;
+    grid-template-columns: 1fr;
+    margin-left: 28px;
+  }
+
+  .item-schedule-field {
+    justify-content: space-between;
+  }
 }

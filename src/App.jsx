@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Map from './components/Map'
 import CreateTripModal from './components/CreateTripModal'
 import TripEdit from './components/TripEdit'
@@ -41,6 +41,43 @@ function createTripRecord(trip) {
   }
 }
 
+function mergeTripIntoCollection(sourceTrips, incomingTrip) {
+  const nextTrip = createTripRecord(incomingTrip)
+  const existingIndex = sourceTrips.findIndex(
+    (trip) =>
+      trip.id === nextTrip.id ||
+      (
+        normalizeTripCode(trip.shareCode) &&
+        normalizeTripCode(trip.shareCode) === normalizeTripCode(nextTrip.shareCode)
+      ),
+  )
+
+  if (existingIndex === -1) {
+    return {
+      trip: nextTrip,
+      trips: sourceTrips,
+    }
+  }
+
+  const existingTrip = sourceTrips[existingIndex]
+  const mergedTrip = {
+    ...nextTrip,
+    id: existingTrip.id,
+  }
+
+  if (JSON.stringify(existingTrip) === JSON.stringify(mergedTrip)) {
+    return {
+      trip: existingTrip,
+      trips: sourceTrips,
+    }
+  }
+
+  return {
+    trip: mergedTrip,
+    trips: sourceTrips.map((trip, index) => (index === existingIndex ? mergedTrip : trip)),
+  }
+}
+
 async function requestTripShareCode(trip) {
   const response = await fetch('/api/share', {
     method: 'POST',
@@ -63,7 +100,7 @@ async function requestTripShareCode(trip) {
   return normalizeTripCode(data.shareCode)
 }
 
-async function fetchTripByShareCode(rawCode) {
+async function fetchTripByShareCode(rawCode, preferredId) {
   const shareCode = normalizeTripCode(rawCode)
   if (!shareCode) {
     throw new Error('请输入行程码')
@@ -78,7 +115,7 @@ async function fetchTripByShareCode(rawCode) {
 
   return createTripRecord({
     ...data.trip,
-    id: `shared-${data.shareCode || shareCode}`,
+    id: preferredId || `shared-${data.shareCode || shareCode}`,
     shareCode: data.shareCode || shareCode,
   })
 }
@@ -92,6 +129,7 @@ function MyTrip({
   onCreateTrip,
   onDeleteTrip,
   onUpdateTrip,
+  onOpenTrip,
   onShareTrip,
   onGenerateTripCode,
   onSearchTripCode,
@@ -102,6 +140,7 @@ function MyTrip({
   const [tripCodeError, setTripCodeError] = useState('')
   const [searchingTripCode, setSearchingTripCode] = useState(false)
   const [searchedTrip, setSearchedTrip] = useState(null)
+  const [openingTripId, setOpeningTripId] = useState('')
 
   const renderTripCard = (trip, options = {}) => {
     const { key, onClick, showDelete = false, showShare = true, highlight = false } = options
@@ -177,6 +216,19 @@ function MyTrip({
     }
   }
 
+  const handleOpenTrip = async (trip) => {
+    setOpeningTripId(trip.id || trip.shareCode || 'opening')
+
+    try {
+      const nextTrip = await onOpenTrip(trip)
+      setEditingTrip(nextTrip)
+    } catch (error) {
+      window.alert(error.message || '打开行程失败')
+    } finally {
+      setOpeningTripId('')
+    }
+  }
+
   return (
     <div className="trip-page">
       <div className="trip-left">
@@ -220,7 +272,7 @@ function MyTrip({
                 <div className="trip-search-result-title">搜索结果</div>
                 {renderTripCard(searchedTrip, {
                   key: `searched-${searchedTrip.shareCode || searchedTrip.id}`,
-                  onClick: () => setEditingTrip(searchedTrip),
+                  onClick: () => handleOpenTrip(searchedTrip),
                   showDelete: false,
                   showShare: true,
                   highlight: true,
@@ -234,13 +286,14 @@ function MyTrip({
               trips.map((trip) =>
                 renderTripCard(trip, {
                   key: trip.id,
-                  onClick: () => setEditingTrip(trip),
+                  onClick: () => handleOpenTrip(trip),
                   showDelete: true,
                   showShare: true,
                 }),
               )
             )}
           </div>
+          {openingTripId && <div className="trip-opening-tip">正在同步最新行程内容...</div>}
         </div>
       </div>
 
@@ -364,7 +417,7 @@ function loadNotes() {
   }
 }
 
-function SharedTripView({ shareCode }) {
+function SharedTripEditor({ shareCode, onBack, onOpenTrip, onUpdateTrip }) {
   const [trip, setTrip] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -372,42 +425,27 @@ function SharedTripView({ shareCode }) {
   useEffect(() => {
     if (!shareCode) return
 
-    fetch(`/api/share/${normalizeTripCode(shareCode)}`)
-      .then((response) => response.json())
+    onOpenTrip({ id: `shared-${normalizeTripCode(shareCode)}`, shareCode })
       .then((data) => {
-        if (data.ok) {
-          setTrip(data.trip)
-        } else {
-          setError(data.error || '加载失败')
-        }
+        setTrip(data)
       })
-      .catch(() => setError('网络错误'))
+      .catch((loadError) => setError(loadError.message || '加载失败'))
       .finally(() => setLoading(false))
-  }, [shareCode])
+  }, [shareCode, onOpenTrip])
 
   if (loading) return <div className="shared-trip-loading">加载分享行程中...</div>
   if (error) return <div className="shared-trip-error">{error}</div>
   if (!trip) return null
 
   return (
-    <div className="shared-trip-view">
-      <h2>查看分享的行程</h2>
-      <div className="shared-trip-info">
-        <p>
-          <strong>行程码：</strong>
-          {trip.shareCode || normalizeTripCode(shareCode)}
-        </p>
-        <p>
-          <strong>目的地：</strong>
-          {trip.cities?.join('、')}
-        </p>
-        <p>
-          <strong>时间：</strong>
-          {trip.startDate} ~ {trip.endDate}
-        </p>
-      </div>
-      <Map sharedTrip={trip} />
-    </div>
+    <TripEdit
+      trip={trip}
+      onSave={async (updatedTrip) => {
+        await onUpdateTrip(updatedTrip)
+        setTrip(createTripRecord(updatedTrip))
+      }}
+      onClose={onBack}
+    />
   )
 }
 
@@ -510,6 +548,24 @@ function App() {
     setTrips((prev) => [...prev, newTrip])
   }
 
+  const handleOpenTrip = useCallback(async (trip) => {
+    const nextTrip = createTripRecord(trip)
+    const shareCode = normalizeTripCode(nextTrip.shareCode)
+
+    if (!shareCode) {
+      return nextTrip
+    }
+
+    const remoteTrip = await fetchTripByShareCode(shareCode, nextTrip.id)
+    const merged = mergeTripIntoCollection(trips, remoteTrip)
+
+    if (merged.trips !== trips) {
+      setTrips(merged.trips)
+    }
+
+    return merged.trip
+  }, [trips])
+
   const handleUpdateTrip = async (updatedTrip) => {
     const nextTrip = createTripRecord(updatedTrip)
 
@@ -522,32 +578,19 @@ function App() {
     }
 
     setTrips((prev) => {
-      const existingIndex = prev.findIndex(
-        (trip) =>
-          trip.id === nextTrip.id ||
-          (
-            normalizeTripCode(trip.shareCode) &&
-            normalizeTripCode(trip.shareCode) === normalizeTripCode(nextTrip.shareCode)
-          ),
-      )
+      const merged = mergeTripIntoCollection(prev, nextTrip)
 
-      if (existingIndex === -1) {
+      if (merged.trips === prev) {
         return [
           ...prev,
           {
-            ...nextTrip,
-            id: nextTrip.id.startsWith('shared-') ? Date.now().toString() : nextTrip.id,
+            ...merged.trip,
+            id: merged.trip.id.startsWith('shared-') ? Date.now().toString() : merged.trip.id,
           },
         ]
       }
 
-      const existingTrip = prev[existingIndex]
-      const mergedTrip = {
-        ...nextTrip,
-        id: existingTrip.id,
-      }
-
-      return prev.map((trip, index) => (index === existingIndex ? mergedTrip : trip))
+      return merged.trips
     })
   }
 
@@ -566,14 +609,8 @@ function App() {
       throw new Error('请输入行程码')
     }
 
-    const existingTrip = trips.find(
-      (trip) => normalizeTripCode(trip.shareCode) === shareCode,
-    )
-    if (existingTrip) {
-      return existingTrip
-    }
-
-    return fetchTripByShareCode(shareCode)
+    const existingTrip = trips.find((trip) => normalizeTripCode(trip.shareCode) === shareCode)
+    return fetchTripByShareCode(shareCode, existingTrip?.id)
   }
 
   const handleAddNote = (noteData) => {
@@ -615,7 +652,16 @@ function App() {
           </div>
         </header>
         <main className="app-main">
-          <SharedTripView key={shareCodeFromUrl} shareCode={shareCodeFromUrl} />
+          <SharedTripEditor
+            key={shareCodeFromUrl}
+            shareCode={shareCodeFromUrl}
+            onBack={() => {
+              setShareCodeFromUrl(null)
+              window.history.pushState({}, '', window.location.pathname)
+            }}
+            onOpenTrip={handleOpenTrip}
+            onUpdateTrip={handleUpdateTrip}
+          />
         </main>
       </div>
     )
@@ -648,6 +694,7 @@ function App() {
             onCreateTrip={handleCreateTrip}
             onDeleteTrip={handleDeleteTrip}
             onUpdateTrip={handleUpdateTrip}
+            onOpenTrip={handleOpenTrip}
             onShareTrip={handleShareTrip}
             onGenerateTripCode={handleGenerateTripCode}
             onSearchTripCode={handleSearchTripCode}
