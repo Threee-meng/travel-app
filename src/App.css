@@ -1709,66 +1709,6 @@
   -webkit-box-orient: vertical;
 }
 
-.note-xhs-link-card {
-  display: grid;
-  grid-template-columns: 48px 1fr auto;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 16px;
-  padding: 12px;
-  border: 1px solid #fecdd3;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #fff1f2 0%, #fff 100%);
-}
-
-.note-xhs-link-cover {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #ff2442;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-
-.note-xhs-link-info {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.note-xhs-link-info strong {
-  color: #9f1239;
-  font-size: 13px;
-}
-
-.note-xhs-link-info span {
-  color: #9f1239;
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.note-xhs-link-open {
-  padding: 7px 10px;
-  border-radius: 999px;
-  background: #fff;
-  border: 1px solid #fb7185;
-  color: #e11d48;
-  font-size: 12px;
-  font-weight: 700;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.note-xhs-link-open:hover {
-  background: #ffe4e6;
-}
-
 .note-card-edit {
   background: var(--social-bg);
   border: 1px solid var(--border);
@@ -1819,39 +1759,4 @@
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.1);
-}
-
-.note-link-tip {
-  margin-top: -8px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
-  color: #9a3412;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-@media (prefers-color-scheme: dark) {
-  .note-xhs-link-card {
-    background: linear-gradient(135deg, rgba(127, 29, 29, 0.28) 0%, var(--bg) 100%);
-    border-color: #7f1d1d;
-  }
-
-  .note-xhs-link-info strong,
-  .note-xhs-link-info span {
-    color: #fda4af;
-  }
-
-  .note-xhs-link-open {
-    background: #1f2937;
-    border-color: #be123c;
-    color: #fda4af;
-  }
-
-  .note-link-tip {
-    background: rgba(67, 20, 7, 0.45);
-    border-color: #9a3412;
-    color: #fdba74;
-  }
 }
