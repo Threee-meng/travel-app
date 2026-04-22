@@ -3,6 +3,15 @@ import './TripEdit.css'
 
 const AMAP_KEY = 'e2c347ab0fa80da1220c9650bd4492e6'
 
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function TripEdit({ trip, onSave, onClose }) {
   const [tripName, setTripName] = useState('')
   const [activeSection, setActiveSection] = useState('overview')
@@ -18,8 +27,10 @@ function TripEdit({ trip, onSave, onClose }) {
   const [notes, setNotes] = useState(trip.notes || '')
   const [tags, setTags] = useState(trip.tags || [])
   const [tagInput, setTagInput] = useState('')
+  const [activeRouteDayIndex, setActiveRouteDayIndex] = useState(null)
   const mapRef = useRef(null)
   const mapInstance = useRef(null)
+  const routeLayerRef = useRef([])
   const DEFAULT_DAY_START_TIME = '09:00'
   const DEFAULT_TRAVEL_MINUTES = 30
   const DEFAULT_STAY_MINUTES = {
@@ -429,14 +440,25 @@ function TripEdit({ trip, onSave, onClose }) {
       if (mapInstance.current) {
         mapInstance.current.destroy()
         mapInstance.current = null
+        routeLayerRef.current = []
       }
     }
   }, [])
+
+  const clearDayRouteLayer = () => {
+    if (mapInstance.current && routeLayerRef.current.length > 0) {
+      mapInstance.current.remove(routeLayerRef.current)
+    }
+
+    routeLayerRef.current = []
+    setActiveRouteDayIndex(null)
+  }
 
   // 更新地图标记
   const updateMapMarkers = (map, favs) => {
     if (!map) return
     map.clearMap()
+    routeLayerRef.current = []
 
     favs.forEach(fav => {
       if (fav.location) {
@@ -672,6 +694,109 @@ function TripEdit({ trip, onSave, onClose }) {
   }
 
   // 处理时间修改
+  const getRouteTransportation = (day, fromIndex, toIndex) => {
+    const selectedTransport = day.transportations?.[`${fromIndex}-${toIndex}`]
+    if (selectedTransport) return selectedTransport
+
+    const fromItem = day.items[fromIndex]
+    const toItem = day.items[toIndex]
+    const { options } = calculateTransportation(fromItem, toItem)
+    return options[0] || {
+      type: '步行',
+      time: toItem?.travelDuration || DEFAULT_TRAVEL_MINUTES,
+      cost: 0
+    }
+  }
+
+  const generateDayRoute = (dayIndex) => {
+    const day = days[dayIndex]
+    if (!mapInstance.current || !window.AMap || !day) return
+
+    const routeItems = (day.items || [])
+      .map((item, originalIndex) => ({ ...item, originalIndex }))
+      .filter((item) => item.location && Number.isFinite(Number(item.location.lng)) && Number.isFinite(Number(item.location.lat)))
+
+    if (routeItems.length === 0) {
+      window.alert('这一天还没有可显示在地图上的地点')
+      return
+    }
+
+    clearDayRouteLayer()
+    mapInstance.current.clearMap()
+    routeLayerRef.current = []
+
+    routeItems.forEach((item, index) => {
+      const marker = new window.AMap.Marker({
+        position: [item.location.lng, item.location.lat],
+        title: item.name,
+        content: `
+          <div class="day-route-star-marker" title="${escapeHtml(item.name)}">
+            <span class="day-route-star">⭐</span>
+            <span class="day-route-order">${index + 1}</span>
+          </div>
+        `,
+        offset: new window.AMap.Pixel(-18, -36)
+      })
+
+      const infoWindow = new window.AMap.InfoWindow({
+        content: `
+          <div class="day-route-info">
+            <strong>${index + 1}. ${escapeHtml(item.name)}</strong>
+            <span>${escapeHtml(item.address || item.startTime || '')}</span>
+          </div>
+        `,
+        offset: new window.AMap.Pixel(0, -34)
+      })
+
+      marker.on('click', () => {
+        infoWindow.open(mapInstance.current, marker.getPosition())
+      })
+
+      mapInstance.current.add(marker)
+      routeLayerRef.current.push(marker)
+    })
+
+    for (let index = 1; index < routeItems.length; index++) {
+      const fromItem = routeItems[index - 1]
+      const toItem = routeItems[index]
+      const fromPosition = [fromItem.location.lng, fromItem.location.lat]
+      const toPosition = [toItem.location.lng, toItem.location.lat]
+      const transportation = getRouteTransportation(day, fromItem.originalIndex, toItem.originalIndex)
+
+      const polyline = new window.AMap.Polyline({
+        path: [fromPosition, toPosition],
+        strokeColor: '#ff6b35',
+        strokeWeight: 5,
+        strokeOpacity: 0.9,
+        lineJoin: 'round',
+        showDir: true
+      })
+
+      const midPosition = [
+        (Number(fromItem.location.lng) + Number(toItem.location.lng)) / 2,
+        (Number(fromItem.location.lat) + Number(toItem.location.lat)) / 2
+      ]
+
+      const labelMarker = new window.AMap.Marker({
+        position: midPosition,
+        content: `
+          <div class="day-route-transport-label">
+            ${escapeHtml(transportation.type)}${Math.max(1, Math.round(transportation.time || DEFAULT_TRAVEL_MINUTES))}min
+          </div>
+        `,
+        offset: new window.AMap.Pixel(-42, -16),
+        zIndex: 120
+      })
+
+      mapInstance.current.add(polyline)
+      mapInstance.current.add(labelMarker)
+      routeLayerRef.current.push(polyline, labelMarker)
+    }
+
+    mapInstance.current.setFitView(routeLayerRef.current)
+    setActiveRouteDayIndex(dayIndex)
+  }
+
   const handleTimeChange = (dayIndex, itemIndex, field, rawValue) => {
     updateDayWithRecalculation(dayIndex, (day) => {
       const items = [...day.items]
@@ -991,6 +1116,13 @@ function TripEdit({ trip, onSave, onClose }) {
                       <div className="day-header">
                         <span className="day-title">{dayLabel}</span>
                         <span className="day-date">{day.date}</span>
+                        <button
+                          className={`day-route-btn ${activeRouteDayIndex === dayIndex ? 'active' : ''}`}
+                          onClick={() => generateDayRoute(dayIndex)}
+                          disabled={day.items.filter(item => item.location).length === 0}
+                        >
+                          {activeRouteDayIndex === dayIndex ? '重新生成路线' : '生成路线'}
+                        </button>
                         <input
                           type="time"
                           className="day-time"
