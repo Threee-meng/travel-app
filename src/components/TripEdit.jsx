@@ -28,6 +28,8 @@ function TripEdit({ trip, onSave, onClose }) {
   const [tags, setTags] = useState(trip.tags || [])
   const [tagInput, setTagInput] = useState('')
   const [activeRouteDayIndex, setActiveRouteDayIndex] = useState(null)
+  const [addTargetDayIndex, setAddTargetDayIndex] = useState(null)
+  const [recommendSnapshots, setRecommendSnapshots] = useState({})
   const mapRef = useRef(null)
   const mapInstance = useRef(null)
   const routeLayerRef = useRef([])
@@ -521,6 +523,8 @@ function TripEdit({ trip, onSave, onClose }) {
       })
       mapInstance.current.add(marker)
     }
+
+    return newFavorite
   }
 
   // 从收藏删除
@@ -644,8 +648,42 @@ function TripEdit({ trip, onSave, onClose }) {
 
   // 添加住宿/交通
   const handleAddItem = (item) => {
-    addToFavorites({ ...item, type: addType })
+    const newFavorite = addToFavorites({ ...item, type: addType })
+
+    if (addTargetDayIndex !== null && newFavorite) {
+      updateDayWithRecalculation(addTargetDayIndex, (day) => ({
+        ...day,
+        items: [
+          ...(day.items || []),
+          {
+            ...newFavorite,
+            order: (day.items || []).length + 1,
+            travelDuration: (day.items || []).length === 0 ? 0 : DEFAULT_TRAVEL_MINUTES,
+            stayDuration: getDefaultStayMinutes(newFavorite.type),
+            startTime: '',
+            time: ''
+          }
+        ]
+      }), { preserveFirstItemStart: true })
+    }
+
     setShowAddModal(false)
+    setAddTargetDayIndex(null)
+    setSearchKeyword('')
+    setSearchResults([])
+  }
+
+  const openAddModalForDay = (dayIndex) => {
+    setAddType('spot')
+    setAddTargetDayIndex(dayIndex)
+    setSearchKeyword('')
+    setSearchResults([])
+    setShowAddModal(true)
+  }
+
+  const closeAddModal = () => {
+    setShowAddModal(false)
+    setAddTargetDayIndex(null)
     setSearchKeyword('')
     setSearchResults([])
   }
@@ -659,6 +697,54 @@ function TripEdit({ trip, onSave, onClose }) {
   }
 
   // 计算出行方式和时间
+  const createXiaohongshuSearchUrl = (item) => {
+    const keyword = [item.name, item.address].filter(Boolean).join(' ')
+    return `https://www.xiaohongshu.com/search_result?keyword=${encodeURIComponent(keyword || '旅行攻略')}`
+  }
+
+  const getHomeworkLinks = (item) => {
+    if (Array.isArray(item.homeworkLinks)) {
+      return item.homeworkLinks
+    }
+
+    return item.homeworkLink ? [item.homeworkLink] : ['']
+  }
+
+  const updateHomeworkLinks = (dayIndex, itemIndex, links) => {
+    updateDayWithRecalculation(dayIndex, (day) => {
+      const items = [...day.items]
+      const nextLinks = links.map((link) => link.trim())
+
+      items[itemIndex] = {
+        ...items[itemIndex],
+        homeworkLinks: nextLinks,
+        homeworkLink: nextLinks.find(Boolean) || ''
+      }
+
+      return {
+        ...day,
+        items
+      }
+    }, { preserveFirstItemStart: true })
+  }
+
+  const updateHomeworkLinkAt = (dayIndex, itemIndex, linkIndex, value) => {
+    const links = [...getHomeworkLinks(days[dayIndex].items[itemIndex])]
+    links[linkIndex] = value
+    updateHomeworkLinks(dayIndex, itemIndex, links)
+  }
+
+  const addHomeworkLink = (dayIndex, itemIndex) => {
+    const links = [...getHomeworkLinks(days[dayIndex].items[itemIndex])]
+    updateHomeworkLinks(dayIndex, itemIndex, [...links, ''])
+  }
+
+  const removeHomeworkLink = (dayIndex, itemIndex, linkIndex) => {
+    const links = [...getHomeworkLinks(days[dayIndex].items[itemIndex])]
+    const nextLinks = links.filter((_, index) => index !== linkIndex)
+    updateHomeworkLinks(dayIndex, itemIndex, nextLinks.length > 0 ? nextLinks : [''])
+  }
+
   const calculateTransportation = (from, to) => {
     if (!from.location || !to.location) return { options: [] }
 
@@ -853,6 +939,11 @@ function TripEdit({ trip, onSave, onClose }) {
     const day = days[dayIndex]
     if (!day || day.items.length < 2) return
 
+    setRecommendSnapshots((prev) => ({
+      ...prev,
+      [dayIndex]: JSON.parse(JSON.stringify(day))
+    }))
+
     const items = day.items
     const startIndex = items.findIndex(item => item.type === 'hotel' && item.order === 1)
     let currentIndex = startIndex === -1 ? 0 : startIndex
@@ -908,6 +999,25 @@ function TripEdit({ trip, onSave, onClose }) {
     })
 
     setDays(newDays)
+  }
+
+  const undoRecommendOrder = (dayIndex) => {
+    const snapshot = recommendSnapshots[dayIndex]
+    if (!snapshot) return
+
+    setDays((prev) => prev.map((day, index) => (index === dayIndex ? snapshot : day)))
+    setRecommendSnapshots((prev) => {
+      const next = { ...prev }
+      delete next[dayIndex]
+      return next
+    })
+
+    if (activeRouteDayIndex === dayIndex) {
+      clearDayRouteLayer()
+      if (mapInstance.current) {
+        updateMapMarkers(mapInstance.current, favorites)
+      }
+    }
   }
 
   // 处理出行方式选择
@@ -1117,6 +1227,12 @@ function TripEdit({ trip, onSave, onClose }) {
                         <span className="day-title">{dayLabel}</span>
                         <span className="day-date">{day.date}</span>
                         <button
+                          className="day-add-place-btn"
+                          onClick={() => openAddModalForDay(dayIndex)}
+                        >
+                          + 添加地点
+                        </button>
+                        <button
                           className={`day-route-btn ${activeRouteDayIndex === dayIndex ? 'active' : ''}`}
                           onClick={() => generateDayRoute(dayIndex)}
                           disabled={day.items.filter(item => item.location).length === 0}
@@ -1141,6 +1257,14 @@ function TripEdit({ trip, onSave, onClose }) {
                         >
                           AI推荐顺序
                         </button>
+                        {recommendSnapshots[dayIndex] && (
+                          <button
+                            className="undo-recommend-btn"
+                            onClick={() => undoRecommendOrder(dayIndex)}
+                          >
+                            撤回推荐
+                          </button>
+                        )}
                       </div>
                       <div className="day-items">
                         {day.items.length === 0 ? (
@@ -1211,6 +1335,56 @@ function TripEdit({ trip, onSave, onClose }) {
                                 </div>
                                 <button className="item-delete" onClick={() => removeFromDay(dayIndex, item.id)}>×</button>
                               </div>
+                              <div className="homework-block">
+                                <div className="homework-header">
+                                  <span>抄作业</span>
+                                  <a
+                                    href={createXiaohongshuSearchUrl(item)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    去小红书搜这个地点
+                                  </a>
+                                </div>
+                                <div className="homework-links">
+                                  {getHomeworkLinks(item).map((link, linkIndex) => (
+                                    <div className="homework-input-row" key={`${item.id}-homework-${linkIndex}`}>
+                                      <input
+                                        type="url"
+                                        placeholder="粘贴你选中的小红书原帖链接"
+                                        value={link}
+                                        onChange={(e) => updateHomeworkLinkAt(dayIndex, itemIndex, linkIndex, e.target.value)}
+                                      />
+                                      {link && (
+                                        <a
+                                          className="homework-open"
+                                          href={link}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
+                                          打开
+                                        </a>
+                                      )}
+                                      {getHomeworkLinks(item).length > 1 && (
+                                        <button
+                                          type="button"
+                                          className="homework-remove"
+                                          onClick={() => removeHomeworkLink(dayIndex, itemIndex, linkIndex)}
+                                        >
+                                          ×
+                                        </button>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                                <button
+                                  type="button"
+                                  className="homework-add"
+                                  onClick={() => addHomeworkLink(dayIndex, itemIndex)}
+                                >
+                                  + 添加链接
+                                </button>
+                              </div>
                             </div>
                           ))
                         )}
@@ -1225,7 +1399,10 @@ function TripEdit({ trip, onSave, onClose }) {
 
         {/* 添加按钮 */}
         <div className="trip-edit-footer">
-          <button className="add-item-btn" onClick={() => setShowAddModal(true)}>
+          <button className="add-item-btn" onClick={() => {
+            setAddTargetDayIndex(null)
+            setShowAddModal(true)
+          }}>
             <span>+</span>
             <span>添加地点/住宿/交通</span>
           </button>
@@ -1240,7 +1417,7 @@ function TripEdit({ trip, onSave, onClose }) {
 
       {/* 添加弹窗 */}
       {showAddModal && (
-        <div className="add-modal-overlay" onClick={() => setShowAddModal(false)}>
+        <div className="add-modal-overlay" onClick={closeAddModal}>
           <div className="add-modal" onClick={e => e.stopPropagation()}>
             <div className="add-modal-header">
               <div className="add-type-tabs">
@@ -1265,6 +1442,11 @@ function TripEdit({ trip, onSave, onClose }) {
               </div>
               <button className="add-modal-close" onClick={() => setShowAddModal(false)}>×</button>
             </div>
+            {addTargetDayIndex !== null && (
+              <div className="add-modal-target-tip">
+                添加后会直接放入{getDayLabel(addTargetDayIndex + 1)}
+              </div>
+            )}
             <div className="add-modal-search">
               <input
                 type="text"
