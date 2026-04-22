@@ -365,6 +365,23 @@ function TravelNotes({ notes, onAddNote, onUpdateNote, onDeleteNote }) {
               <div className="note-card-content">
                 {note.content.length > 100 ? `${note.content.substring(0, 100)}...` : note.content}
               </div>
+              {note.xiaohongshuUrl && (
+                <div className="note-xhs-link-card">
+                  <div className="note-xhs-link-cover">RED</div>
+                  <div className="note-xhs-link-info">
+                    <strong>小红书灵感链接</strong>
+                    <span>仅保存原帖链接，不抓取原帖照片或正文。</span>
+                  </div>
+                  <a
+                    className="note-xhs-link-open"
+                    href={note.xiaohongshuUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    打开原帖
+                  </a>
+                </div>
+              )}
               <button className="note-card-edit" onClick={() => setEditingNote(note)}>
                 编辑
               </button>

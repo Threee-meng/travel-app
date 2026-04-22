@@ -1,23 +1,30 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+
+function normalizeLink(value) {
+  return String(value || '').trim()
+}
 
 const NotesModal = ({ open, onClose, note, onSave }) => {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [location, setLocation] = useState('')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [xiaohongshuUrl, setXiaohongshuUrl] = useState('')
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (note) {
-      setTitle(note.title)
-      setContent(note.content)
-      setLocation(note.location)
-      setDate(note.date)
+      setTitle(note.title || '')
+      setContent(note.content || '')
+      setLocation(note.location || '')
+      setDate(note.date || new Date().toISOString().split('T')[0])
+      setXiaohongshuUrl(note.xiaohongshuUrl || '')
     } else {
       setTitle('')
       setContent('')
       setLocation('')
       setDate(new Date().toISOString().split('T')[0])
+      setXiaohongshuUrl('')
     }
   }, [note, open])
 
@@ -26,6 +33,7 @@ const NotesModal = ({ open, onClose, note, onSave }) => {
   const handleSave = async (e) => {
     e.preventDefault()
     setLoading(true)
+
     try {
       const noteData = {
         id: note?.id || Date.now().toString(),
@@ -33,8 +41,10 @@ const NotesModal = ({ open, onClose, note, onSave }) => {
         content,
         location,
         date,
+        xiaohongshuUrl: normalizeLink(xiaohongshuUrl),
         createdAt: note?.createdAt || new Date().toISOString()
       }
+
       onSave(noteData)
       onClose()
     } finally {
@@ -78,9 +88,21 @@ const NotesModal = ({ open, onClose, note, onSave }) => {
             />
           </label>
           <label>
+            小红书帖子链接
+            <input
+              type="url"
+              placeholder="粘贴小红书原帖链接，不抓取原帖照片或正文"
+              value={xiaohongshuUrl}
+              onChange={(e) => setXiaohongshuUrl(e.target.value)}
+            />
+          </label>
+          <div className="note-link-tip">
+            合规提示：这里只保存原帖链接和你的个人备注，不抓取、不复制、不展示小红书原帖照片。
+          </div>
+          <label>
             内容
             <textarea
-              placeholder="记录你的旅行故事..."
+              placeholder="记录你的旅行故事、灵感备注或避坑信息..."
               value={content}
               onChange={(e) => setContent(e.target.value)}
               rows={8}
