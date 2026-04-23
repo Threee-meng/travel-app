@@ -76,6 +76,7 @@ function Map({ mode = 'explore' }) {
     isWorldGuide ? readStoredVisitedPlaces() : []
   ))
   const [showRoute, setShowRoute] = useState(false)
+  const [draggingVisitedPlaceId, setDraggingVisitedPlaceId] = useState(null)
   const mapInstance = useRef(null)
   const markersRef = useRef([])
   const userMarkerObjectsRef = useRef([])
@@ -137,6 +138,24 @@ function Map({ mode = 'explore' }) {
 
   const removeVisitedPlace = useCallback((placeId) => {
     setVisitedPlaces((prev) => prev.filter((place) => place.id !== placeId))
+    clearRoute()
+  }, [clearRoute])
+
+  const moveVisitedPlace = useCallback((fromId, toId) => {
+    if (!fromId || !toId || fromId === toId) return
+
+    const currentPlaces = visitedPlacesRef.current
+    const fromIndex = currentPlaces.findIndex((place) => place.id === fromId)
+    const toIndex = currentPlaces.findIndex((place) => place.id === toId)
+
+    if (fromIndex === -1 || toIndex === -1) return
+
+    const nextPlaces = [...currentPlaces]
+    const [movedPlace] = nextPlaces.splice(fromIndex, 1)
+    nextPlaces.splice(toIndex, 0, movedPlace)
+
+    visitedPlacesRef.current = nextPlaces
+    setVisitedPlaces(nextPlaces)
     clearRoute()
   }, [clearRoute])
 
@@ -431,6 +450,11 @@ function Map({ mode = 'explore' }) {
     })
   }
 
+  const clearPois = () => {
+    setPois([])
+    clearMarkers()
+  }
+
   useEffect(() => {
     const initMap = () => {
       const container = document.getElementById('amap-container')
@@ -559,7 +583,10 @@ function Map({ mode = 'explore' }) {
 
       {pois.length > 0 && (
         <aside className="poi-list">
-          <h3>搜索结果 ({pois.length})</h3>
+          <div className="poi-list-header">
+            <h3>搜索结果 ({pois.length})</h3>
+            <button type="button" className="poi-list-close" onClick={clearPois}>×</button>
+          </div>
           <ul>
             {pois.map((poi, index) => (
               <li key={`${poi.name}-${index}`} onClick={() => handlePoiSelect(poi)}>
@@ -583,12 +610,25 @@ function Map({ mode = 'explore' }) {
           <h3>去过的地点 ({visitedPlaces.length})</h3>
           <ul>
             {visitedPlaces.map((place) => (
-              <li key={place.id} onClick={() => {
-                if (mapInstance.current) {
-                  mapInstance.current.setZoom(15)
-                  mapInstance.current.setCenter(place.position)
-                }
-              }}>
+              <li
+                key={place.id}
+                className={`visited-place-item ${draggingVisitedPlaceId === place.id ? 'dragging' : ''}`}
+                draggable
+                onDragStart={() => setDraggingVisitedPlaceId(place.id)}
+                onDragEnd={() => setDraggingVisitedPlaceId(null)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  moveVisitedPlace(draggingVisitedPlaceId, place.id)
+                  setDraggingVisitedPlaceId(null)
+                }}
+                onClick={() => {
+                  if (mapInstance.current) {
+                    mapInstance.current.setZoom(15)
+                    mapInstance.current.setCenter(place.position)
+                  }
+                }}
+              >
                 <div className="visited-place-main">
                   <strong>⭐ {place.name}</strong>
                   <span>{place.address || `${place.position[0].toFixed(4)}, ${place.position[1].toFixed(4)}`}</span>

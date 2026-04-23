@@ -144,15 +144,43 @@
   z-index: 10;
 }
 
-.poi-list h3 {
+.poi-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin: 0;
   padding: 12px 16px;
-  font-size: 14px;
-  font-weight: 500;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
   position: sticky;
   top: 0;
+  z-index: 1;
+}
+
+.poi-list h3 {
+  margin: 0;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.poi-list-close {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: #fee2e2;
+  color: #dc2626;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.poi-list-close:hover {
+  background: #fecaca;
 }
 
 .poi-list ul {
@@ -325,6 +353,23 @@
 
 .visited-places-list {
   width: 320px;
+}
+
+.visited-place-item {
+  user-select: none;
+}
+
+.visited-place-item.dragging {
+  opacity: 0.45;
+  background: #fff7ed;
+}
+
+.visited-place-item::before {
+  content: "⋮⋮";
+  color: #c2410c;
+  font-size: 12px;
+  letter-spacing: -2px;
+  flex-shrink: 0;
 }
 
 .visited-star-marker {
